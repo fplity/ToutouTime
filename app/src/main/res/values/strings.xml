@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">偷偷时间</string>
+    <string name="start_studying">开始学习</string>
+    <string name="finish_and_save">结束并保存</string>
+    <string name="view_this_week">查看本周</string>
+    <string name="view_this_month">查看本月</string>
+    <string name="unnoted">未备注</string>
+</resources>

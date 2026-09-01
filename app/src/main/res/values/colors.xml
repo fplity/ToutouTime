@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="study_accent">#3F5F90</color>
+    <color name="study_background">#F8F9FC</color>
+    <color name="study_surface">#FFFFFF</color>
+    <color name="study_on_surface">#1A1B20</color>
+    <color name="toutou_icon_background">#F7F6F2</color>
+    <color name="toutou_icon_ink">#111111</color>
+    <color name="toutou_icon_cobalt">#3155D9</color>
+</resources>

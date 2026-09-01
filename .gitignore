@@ -1,0 +1,44 @@
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+
+# Gradle and Kotlin caches
+.gradle/
+.gradle-compile-cache-v1/
+.tmp-build/
+.kotlin/
+
+# Build outputs
+build/
+**/build/
+
+# Local Android SDK configuration
+local.properties
+
+# Device and native build artifacts
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Signing material
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+
+# Local collaboration and test evidence
+.agents/
+.codex/
+ui-redesign-evidence-v1/
+UI_REDESIGN_*.md
+UI_REDESIGN_*.yaml
+
+# Local design sources and previous APK exports.
+# Public-facing copies live under docs/ and releases/.
+design/
+dist/
