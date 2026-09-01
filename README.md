@@ -7,9 +7,9 @@
 
 ## 下载体验
 
-[直接下载偷偷时间 v0.1.0 APK](https://github.com/fplity/ToutouTime/releases/download/v0.1.0/ToutouTime-v0.1.0-debug.apk)
+[直接下载偷偷时间 v0.1.0 APK](https://github.com/fplity/ToutouTime/raw/refs/heads/main/releases/ToutouTime-v0.1.0-debug.apk)
 
-如果 Release 下载受到网络限制，也可以从仓库内的 [`releases/`](releases/) 目录获取同一份安装包。
+也可以从仓库内的 [`releases/`](releases/) 目录查看同一份安装包。
 
 当前提供的是 Debug 测试包，适合直接安装体验。最低支持 Android 8.0（API 26）。安装时如果系统提示“未知来源应用”，请只为当前文件管理器临时授权。
 
@@ -90,3 +90,4 @@ app/src/main/
 - APK 为 Debug 测试签名，不是应用商店正式签名版本。
 - 数据只保存在当前设备，暂不支持备份、导出或跨设备同步。
 - 项目暂未声明开源许可证；未经许可不自动获得复制、修改或再分发授权。
+
