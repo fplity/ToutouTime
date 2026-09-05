@@ -9,6 +9,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.studenttimetotalnote.ui.home.HomeSemantics
 import com.example.studenttimetotalnote.ui.components.StudyTimerSemantics
 import com.example.studenttimetotalnote.ui.statistics.StatisticsSemantics
+import java.time.Year
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -53,5 +54,20 @@ class StudyTimerNavigationSmokeTest {
         composeRule.onNodeWithTag(StatisticsSemantics.Screen).assertIsDisplayed()
         composeRule.onNodeWithTag(StatisticsSemantics.Back).performClick()
         composeRule.onNodeWithText("偷偷时间").assertIsDisplayed()
+    }
+
+    @Test
+    fun annualPeriodShowsTheExactYearAndSwitchesToAFutureYear() {
+        val currentYear = Year.now().value
+        composeRule.onNodeWithTag(HomeSemantics.TodaySummary).performClick()
+        composeRule.onNodeWithTag(StatisticsSemantics.PeriodTabs).performClick()
+        composeRule.onNodeWithText("年度").assertIsDisplayed().performClick()
+
+        composeRule.onNodeWithTag(StatisticsSemantics.YearSelector).assertIsDisplayed()
+        composeRule.onNodeWithText("$currentYear 年").assertIsDisplayed()
+        composeRule.onNodeWithTag(StatisticsSemantics.NextYear).performClick()
+        composeRule.onNodeWithText("${currentYear + 1} 年").assertIsDisplayed()
+        composeRule.onNodeWithTag(StatisticsSemantics.PreviousYear).performClick()
+        composeRule.onNodeWithText("$currentYear 年").assertIsDisplayed()
     }
 }

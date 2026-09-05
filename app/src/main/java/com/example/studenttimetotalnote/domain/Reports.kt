@@ -41,10 +41,33 @@ fun resolveReportPeriod(kind: PeriodKind, now: ZonedDateTime, zone: ZoneId): Rep
                 "上一完整自然月（$previousStart 至 ${currentStart.minusDays(1)}）",
             )
         }
+        PeriodKind.YEAR -> return resolveYearReportPeriod(localDate.year, now.toInstant(), zone)
     }
 
     return ReportPeriod(
         kind = kind,
+        label = label,
+        startInclusive = startDate.atStartOfDay(zone).toInstant(),
+        endExclusive = endDateExclusive.atStartOfDay(zone).toInstant(),
+        startDate = startDate,
+        endDateExclusive = endDateExclusive,
+    )
+}
+
+fun resolveYearReportPeriod(year: Int, now: Instant, zone: ZoneId): ReportPeriod {
+    require(year in MIN_REPORT_YEAR..MAX_REPORT_YEAR) {
+        "Year must be between $MIN_REPORT_YEAR and $MAX_REPORT_YEAR"
+    }
+    val today = now.atZone(zone).toLocalDate()
+    val startDate = LocalDate.of(year, 1, 1)
+    val endDateExclusive = startDate.plusYears(1)
+    val label = if (year == today.year) {
+        "${year}年（截至 $today）"
+    } else {
+        "${year}年（$startDate 至 ${endDateExclusive.minusDays(1)}）"
+    }
+    return ReportPeriod(
+        kind = PeriodKind.YEAR,
         label = label,
         startInclusive = startDate.atStartOfDay(zone).toInstant(),
         endExclusive = endDateExclusive.atStartOfDay(zone).toInstant(),
@@ -98,3 +121,6 @@ private fun resolveTodayPeriod(now: Instant, zone: ZoneId): ReportPeriod {
         endDateExclusive = nextDate,
     )
 }
+
+const val MIN_REPORT_YEAR = 1
+const val MAX_REPORT_YEAR = 9998

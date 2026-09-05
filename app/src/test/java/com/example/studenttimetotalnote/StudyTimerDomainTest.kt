@@ -4,6 +4,7 @@ import com.example.studenttimetotalnote.data.StudyTimerStore
 import com.example.studenttimetotalnote.domain.DefaultStudyTimerRepository
 import com.example.studenttimetotalnote.domain.aggregate
 import com.example.studenttimetotalnote.domain.resolveReportPeriod
+import com.example.studenttimetotalnote.domain.resolveYearReportPeriod
 import com.example.studenttimetotalnote.domain.todayReport
 import com.example.studenttimetotalnote.domain.model.ActiveSession
 import com.example.studenttimetotalnote.domain.model.PeriodKind
@@ -138,6 +139,74 @@ class StudyTimerDomainTest {
                 zone,
             ).startDate.toEpochDay(),
         )
+    }
+
+    @Test
+    fun annualPeriodsUseNaturalYearAndIdentifyTheExactSelectedYear() {
+        val now = instant("2026-09-04T12:00:00Z")
+
+        val current = resolveYearReportPeriod(2026, now, zone)
+        assertEquals(PeriodKind.YEAR, current.kind)
+        assertEquals(LocalDate.of(2026, 1, 1), current.startDate)
+        assertEquals(LocalDate.of(2027, 1, 1), current.endDateExclusive)
+        assertEquals("2026年（截至 2026-09-04）", current.label)
+
+        val leapYear = resolveYearReportPeriod(2024, now, zone)
+        assertEquals(366L, Duration.between(leapYear.startInclusive, leapYear.endExclusive).toDays())
+        assertEquals("2024年（2024-01-01 至 2024-12-31）", leapYear.label)
+
+        val future = resolveYearReportPeriod(2027, now, zone)
+        assertEquals(LocalDate.of(2027, 1, 1), future.startDate)
+        assertEquals(LocalDate.of(2028, 1, 1), future.endDateExclusive)
+        assertEquals("2027年（2027-01-01 至 2027-12-31）", future.label)
+    }
+
+    @Test
+    fun annualAggregationSplitsARecordAtTheYearBoundary() {
+        val now = instant("2026-09-04T12:00:00Z")
+        val crossing = record(
+            note = "跨年学习",
+            start = "2025-12-31T23:30:00Z",
+            end = "2026-01-01T00:30:00Z",
+        )
+
+        val report2025 = aggregate(listOf(crossing), resolveYearReportPeriod(2025, now, zone))
+        val report2026 = aggregate(listOf(crossing), resolveYearReportPeriod(2026, now, zone))
+
+        assertEquals(30 * 60_000L, report2025.totalDurationMs)
+        assertEquals(30 * 60_000L, report2026.totalDurationMs)
+        assertEquals("跨年学习", report2026.groups.single().noteText)
+    }
+
+    @Test
+    fun annualTrendHasTwelveMonthsAndHighlightsTheCurrentMonth() {
+        val now = instant("2026-09-04T12:00:00Z")
+        val records = listOf(
+            record("Java", "2026-01-10T09:00:00Z", "2026-01-10T09:10:00Z"),
+            record("Java", "2026-09-03T09:00:00Z", "2026-09-03T09:30:00Z"),
+        )
+        val report = aggregate(records, resolveYearReportPeriod(2026, now, zone))
+
+        val trend = buildTrend(records, report, now, zone)
+
+        assertEquals((1..12).map { "${it}月" }, trend.map { it.label })
+        assertEquals(10 * 60_000L, trend[0].durationMs)
+        assertEquals(30 * 60_000L, trend[8].durationMs)
+        assertTrue(trend[8].emphasized)
+        assertEquals(1, trend.count { it.emphasized })
+    }
+
+    @Test
+    fun repositoryCanLoadAndDeleteFromASelectedAnnualReport() = runBlocking {
+        val repository = DefaultStudyTimerRepository(FakeStudyTimerStore())
+        val startedAt = instant("2026-06-01T09:00:00Z")
+        repository.beginSession("年度复习", startedAt)
+        val record = repository.finishSession(startedAt.plusSeconds(45 * 60))!!
+        val now = instant("2026-09-04T12:00:00Z")
+
+        assertEquals(45 * 60_000L, repository.yearReport(2026, now, zone).totalDurationMs)
+        assertTrue(repository.deleteRecord(record.id))
+        assertFalse(repository.yearReport(2026, now, zone).hasData)
     }
 
     @Test

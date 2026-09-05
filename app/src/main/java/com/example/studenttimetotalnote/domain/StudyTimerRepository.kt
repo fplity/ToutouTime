@@ -22,5 +22,7 @@ interface StudyTimerRepository {
 
     suspend fun report(kind: PeriodKind, now: Instant, zone: ZoneId): PeriodReport
 
+    suspend fun yearReport(year: Int, now: Instant, zone: ZoneId): PeriodReport
+
     suspend fun todayReport(now: Instant, zone: ZoneId): PeriodReport
 }

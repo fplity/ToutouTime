@@ -33,6 +33,9 @@ class DefaultStudyTimerRepository(
     override suspend fun report(kind: PeriodKind, now: Instant, zone: ZoneId): PeriodReport =
         aggregate(observeRecords(), resolveReportPeriod(kind, now, zone))
 
+    override suspend fun yearReport(year: Int, now: Instant, zone: ZoneId): PeriodReport =
+        aggregate(observeRecords(), resolveYearReportPeriod(year, now, zone))
+
     override suspend fun todayReport(now: Instant, zone: ZoneId): PeriodReport =
         todayReport(observeRecords(), now, zone)
 }

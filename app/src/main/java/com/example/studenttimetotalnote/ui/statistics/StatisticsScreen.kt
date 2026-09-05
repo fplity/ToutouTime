@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -52,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.studenttimetotalnote.domain.MAX_REPORT_YEAR
+import com.example.studenttimetotalnote.domain.MIN_REPORT_YEAR
 import com.example.studenttimetotalnote.domain.StudyTimerRepository
 import com.example.studenttimetotalnote.domain.model.NoteAggregate
 import com.example.studenttimetotalnote.domain.model.PeriodKind
@@ -73,6 +76,9 @@ object StatisticsSemantics {
     const val Screen = "statistics_screen"
     const val Back = "statistics_back"
     const val PeriodTabs = "statistics_period_tabs"
+    const val YearSelector = "statistics_year_selector"
+    const val PreviousYear = "statistics_previous_year"
+    const val NextYear = "statistics_next_year"
     const val PeriodLabel = "statistics_period_label"
     const val PeriodRange = "statistics_period_range"
     const val TotalCard = "statistics_total_card"
@@ -90,6 +96,7 @@ private val PeriodChoices = listOf(
     PeriodKind.DAY to "今日",
     PeriodKind.WEEK to "上一周",
     PeriodKind.MONTH to "上个月",
+    PeriodKind.YEAR to "年度",
 )
 private val RecordDateFormatter = DateTimeFormatter.ofPattern("yyyy年M月d日 HH:mm", Locale.CHINA)
 private val Destructive = Color(0xFFB4433D)
@@ -103,7 +110,7 @@ fun StatisticsScreen(
     clock: Clock = Clock.systemDefaultZone(),
     zone: ZoneId = ZoneId.systemDefault(),
 ) {
-    val viewModel = remember(repository, initialPeriod, zone) {
+    val viewModel = remember(repository, initialPeriod, clock, zone) {
         StatisticsViewModel(
             repository = repository,
             initialPeriod = initialPeriod,
@@ -117,6 +124,8 @@ fun StatisticsScreen(
         uiState = uiState,
         onBack = onBack,
         onPeriodSelected = viewModel::selectPeriod,
+        onPreviousYear = viewModel::selectPreviousYear,
+        onNextYear = viewModel::selectNextYear,
         onOpenRecords = viewModel::openRecordsForNote,
         modifier = modifier,
     )
@@ -146,6 +155,8 @@ private fun StatisticsContent(
     uiState: StatisticsUiState,
     onBack: () -> Unit,
     onPeriodSelected: (PeriodKind) -> Unit,
+    onPreviousYear: () -> Unit,
+    onNextYear: () -> Unit,
     onOpenRecords: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -164,12 +175,29 @@ private fun StatisticsContent(
         Spacer(modifier = Modifier.height(20.dp))
         StatisticsTopBar(
             selectedPeriod = uiState.selectedPeriod,
+            selectedYear = uiState.selectedYear,
             onBack = onBack,
             onPeriodSelected = onPeriodSelected,
         )
 
+        if (uiState.selectedPeriod == PeriodKind.YEAR) {
+            Spacer(modifier = Modifier.height(25.dp))
+            YearSelector(
+                year = uiState.selectedYear,
+                isCurrentYear = uiState.isCurrentYear,
+                previousEnabled = uiState.selectedYear > MIN_REPORT_YEAR,
+                nextEnabled = uiState.selectedYear < MAX_REPORT_YEAR,
+                onPreviousYear = onPreviousYear,
+                onNextYear = onNextYear,
+            )
+        }
+
         if (report?.hasData == true) {
-            Spacer(modifier = Modifier.height(39.dp))
+            Spacer(
+                modifier = Modifier.height(
+                    if (uiState.selectedPeriod == PeriodKind.YEAR) 29.dp else 39.dp,
+                ),
+            )
             PeriodOverview(report = report)
 
             Spacer(modifier = Modifier.height(34.dp))
@@ -188,6 +216,7 @@ private fun StatisticsContent(
 @Composable
 private fun StatisticsTopBar(
     selectedPeriod: PeriodKind,
+    selectedYear: Int,
     onBack: () -> Unit,
     onPeriodSelected: (PeriodKind) -> Unit,
 ) {
@@ -223,7 +252,11 @@ private fun StatisticsTopBar(
                     .size(44.dp)
                     .testTag(StatisticsSemantics.PeriodTabs)
                     .semantics {
-                        contentDescription = "选择统计周期，${periodDisplayLabel(selectedPeriod)}"
+                        contentDescription = if (selectedPeriod == PeriodKind.YEAR) {
+                            "选择统计周期，年度，${selectedYear}年"
+                        } else {
+                            "选择统计周期，${periodDisplayLabel(selectedPeriod)}"
+                        }
                     },
             ) {
                 FilterIcon()
@@ -256,6 +289,108 @@ private fun StatisticsTopBar(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun YearSelector(
+    year: Int,
+    isCurrentYear: Boolean,
+    previousEnabled: Boolean,
+    nextEnabled: Boolean,
+    onPreviousYear: () -> Unit,
+    onNextYear: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(StatisticsSemantics.YearSelector)
+            .semantics {
+                contentDescription = if (isCurrentYear) {
+                    "${year}年，今年，实时累计"
+                } else {
+                    "${year}年，自然年统计"
+                }
+            },
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(
+            onClick = onPreviousYear,
+            enabled = previousEnabled,
+            modifier = Modifier
+                .size(40.dp)
+                .testTag(StatisticsSemantics.PreviousYear)
+                .semantics { contentDescription = "查看${year - 1}年" },
+        ) {
+            YearArrowIcon(
+                pointsForward = false,
+                enabled = previousEnabled,
+            )
+        }
+        Spacer(modifier = Modifier.width(21.dp))
+        Column(
+            modifier = Modifier.width(132.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = "$year 年",
+                color = Ink,
+                fontSize = 24.sp,
+                lineHeight = 29.sp,
+                fontWeight = FontWeight.Light,
+                letterSpacing = 0.8.sp,
+                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+            )
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+                text = if (isCurrentYear) "今年 · 实时累计" else "自然年",
+                color = if (isCurrentYear) Cobalt else MutedInk,
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+                letterSpacing = 0.5.sp,
+            )
+        }
+        Spacer(modifier = Modifier.width(21.dp))
+        IconButton(
+            onClick = onNextYear,
+            enabled = nextEnabled,
+            modifier = Modifier
+                .size(40.dp)
+                .testTag(StatisticsSemantics.NextYear)
+                .semantics { contentDescription = "查看${year + 1}年" },
+        ) {
+            YearArrowIcon(
+                pointsForward = true,
+                enabled = nextEnabled,
+            )
+        }
+    }
+}
+
+@Composable
+private fun YearArrowIcon(
+    pointsForward: Boolean,
+    enabled: Boolean,
+) {
+    Canvas(modifier = Modifier.size(17.dp)) {
+        val startX = if (pointsForward) size.width * 0.32f else size.width * 0.68f
+        val endX = if (pointsForward) size.width * 0.70f else size.width * 0.30f
+        val color = Ink.copy(alpha = if (enabled) 1f else 0.22f)
+        drawLine(
+            color = color,
+            start = Offset(startX, size.height * 0.16f),
+            end = Offset(endX, size.height * 0.50f),
+            strokeWidth = 1.4.dp.toPx(),
+            cap = StrokeCap.Square,
+        )
+        drawLine(
+            color = color,
+            start = Offset(endX, size.height * 0.50f),
+            end = Offset(startX, size.height * 0.84f),
+            strokeWidth = 1.4.dp.toPx(),
+            cap = StrokeCap.Square,
+        )
     }
 }
 
@@ -326,7 +461,7 @@ private fun PeriodOverview(report: PeriodReport) {
             },
     ) {
         Text(
-            text = periodDisplayLabel(report.kind),
+            text = if (report.kind == PeriodKind.YEAR) "年度累计" else periodDisplayLabel(report.kind),
             color = MutedInk,
             fontSize = 15.sp,
             letterSpacing = 0.8.sp,
@@ -461,7 +596,7 @@ private fun TrendChart(points: List<TrendPoint>) {
                     text = point.label,
                     modifier = Modifier.weight(1f),
                     color = MutedInk,
-                    fontSize = 13.sp,
+                    fontSize = if (points.size > 7) 10.sp else 13.sp,
                     textAlign = TextAlign.Center,
                 )
             }
@@ -706,7 +841,7 @@ private fun DeleteRecordConfirmation(
                 )
                 Spacer(modifier = Modifier.height(18.dp))
                 Text(
-                    text = "删除后，这段时间不会再计入今日、周或月统计，且无法恢复。",
+                    text = "删除后，这段时间不会再计入今日、周、月或年度统计，且无法恢复。",
                     color = MutedInk,
                     fontSize = 13.sp,
                     lineHeight = 20.sp,
@@ -765,6 +900,7 @@ private fun periodDisplayLabel(kind: PeriodKind): String = when (kind) {
     PeriodKind.DAY -> "今日"
     PeriodKind.WEEK -> "上一周"
     PeriodKind.MONTH -> "上个月"
+    PeriodKind.YEAR -> "年度"
 }
 
 private fun formatRecordDate(startedAtEpochMs: Long, zone: ZoneId): String =
