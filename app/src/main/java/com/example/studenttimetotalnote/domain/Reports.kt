@@ -13,36 +13,46 @@ import java.time.ZonedDateTime
 import java.time.temporal.TemporalAdjusters
 
 fun resolveReportPeriod(kind: PeriodKind, now: Instant, zone: ZoneId): ReportPeriod =
-    resolveReportPeriod(kind, now.atZone(zone), zone)
+    resolveReportPeriod(
+        kind = kind,
+        selectedDate = defaultReportDate(kind, now, zone),
+        now = now,
+        zone = zone,
+    )
 
-fun resolveReportPeriod(kind: PeriodKind, now: ZonedDateTime, zone: ZoneId): ReportPeriod {
-    val localDate = now.withZoneSameInstant(zone).toLocalDate()
-    val (startDate, endDateExclusive, label) = when (kind) {
-        PeriodKind.DAY -> Triple(
-            localDate,
-            localDate.plusDays(1),
-            "今日（$localDate）",
-        )
-        PeriodKind.WEEK -> {
-            val currentStart = localDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-            val previousStart = currentStart.minusWeeks(1)
-            Triple(
-                previousStart,
-                currentStart,
-                "上一完整自然周（$previousStart 至 ${currentStart.minusDays(1)}）",
-            )
-        }
-        PeriodKind.MONTH -> {
-            val currentStart = localDate.withDayOfMonth(1)
-            val previousStart = currentStart.minusMonths(1)
-            Triple(
-                previousStart,
-                currentStart,
-                "上一完整自然月（$previousStart 至 ${currentStart.minusDays(1)}）",
-            )
-        }
-        PeriodKind.YEAR -> return resolveYearReportPeriod(localDate.year, now.toInstant(), zone)
+fun resolveReportPeriod(kind: PeriodKind, now: ZonedDateTime, zone: ZoneId): ReportPeriod =
+    resolveReportPeriod(kind, now.toInstant(), zone)
+
+fun defaultReportDate(kind: PeriodKind, now: Instant, zone: ZoneId): LocalDate {
+    val today = now.atZone(zone).toLocalDate()
+    return when (kind) {
+        PeriodKind.DAY -> today
+        PeriodKind.WEEK -> today
+            .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+            .minusWeeks(1)
+        PeriodKind.MONTH -> today.withDayOfMonth(1).minusMonths(1)
+        PeriodKind.YEAR -> today.withDayOfYear(1)
     }
+}
+
+fun resolveReportPeriod(
+    kind: PeriodKind,
+    selectedDate: LocalDate,
+    now: Instant,
+    zone: ZoneId,
+): ReportPeriod {
+    val today = now.atZone(zone).toLocalDate()
+    val startDate = normalizeReportDate(kind, selectedDate)
+    require(startDate.year in MIN_REPORT_YEAR..MAX_REPORT_YEAR) {
+        "Date year must be between $MIN_REPORT_YEAR and $MAX_REPORT_YEAR"
+    }
+    val endDateExclusive = when (kind) {
+        PeriodKind.DAY -> startDate.plusDays(1)
+        PeriodKind.WEEK -> startDate.plusWeeks(1)
+        PeriodKind.MONTH -> startDate.plusMonths(1)
+        PeriodKind.YEAR -> startDate.plusYears(1)
+    }
+    val label = reportPeriodLabel(kind, startDate, endDateExclusive, today)
 
     return ReportPeriod(
         kind = kind,
@@ -58,22 +68,76 @@ fun resolveYearReportPeriod(year: Int, now: Instant, zone: ZoneId): ReportPeriod
     require(year in MIN_REPORT_YEAR..MAX_REPORT_YEAR) {
         "Year must be between $MIN_REPORT_YEAR and $MAX_REPORT_YEAR"
     }
-    val today = now.atZone(zone).toLocalDate()
-    val startDate = LocalDate.of(year, 1, 1)
-    val endDateExclusive = startDate.plusYears(1)
-    val label = if (year == today.year) {
-        "${year}年（截至 $today）"
-    } else {
-        "${year}年（$startDate 至 ${endDateExclusive.minusDays(1)}）"
-    }
-    return ReportPeriod(
+    return resolveReportPeriod(
         kind = PeriodKind.YEAR,
-        label = label,
-        startInclusive = startDate.atStartOfDay(zone).toInstant(),
-        endExclusive = endDateExclusive.atStartOfDay(zone).toInstant(),
-        startDate = startDate,
-        endDateExclusive = endDateExclusive,
+        selectedDate = LocalDate.of(year, 1, 1),
+        now = now,
+        zone = zone,
     )
+}
+
+fun shiftReportDate(kind: PeriodKind, selectedDate: LocalDate, steps: Int): LocalDate {
+    val normalized = normalizeReportDate(kind, selectedDate)
+    val shifted = when (kind) {
+        PeriodKind.DAY -> normalized.plusDays(steps.toLong())
+        PeriodKind.WEEK -> normalized.plusWeeks(steps.toLong())
+        PeriodKind.MONTH -> normalized.plusMonths(steps.toLong())
+        PeriodKind.YEAR -> normalized.plusYears(steps.toLong())
+    }
+    require(shifted.year in MIN_REPORT_YEAR..MAX_REPORT_YEAR) {
+        "Date year must be between $MIN_REPORT_YEAR and $MAX_REPORT_YEAR"
+    }
+    return shifted
+}
+
+fun canShiftReportDate(kind: PeriodKind, selectedDate: LocalDate, steps: Int): Boolean =
+    runCatching { shiftReportDate(kind, selectedDate, steps) }.isSuccess
+
+private fun normalizeReportDate(kind: PeriodKind, selectedDate: LocalDate): LocalDate =
+    when (kind) {
+        PeriodKind.DAY -> selectedDate
+        PeriodKind.WEEK -> selectedDate.with(
+            TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY),
+        )
+        PeriodKind.MONTH -> selectedDate.withDayOfMonth(1)
+        PeriodKind.YEAR -> selectedDate.withDayOfYear(1)
+    }
+
+private fun reportPeriodLabel(
+    kind: PeriodKind,
+    startDate: LocalDate,
+    endDateExclusive: LocalDate,
+    today: LocalDate,
+): String {
+    val endDate = endDateExclusive.minusDays(1)
+    return when (kind) {
+        PeriodKind.DAY -> when (startDate) {
+            today -> "今日（$startDate）"
+            today.minusDays(1) -> "昨天（$startDate）"
+            else -> "日期（$startDate）"
+        }
+        PeriodKind.WEEK -> {
+            val currentWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+            when (startDate) {
+                currentWeek -> "本自然周（$startDate 至 $endDate，截至 $today）"
+                currentWeek.minusWeeks(1) -> "上一完整自然周（$startDate 至 $endDate）"
+                else -> "自然周（$startDate 至 $endDate）"
+            }
+        }
+        PeriodKind.MONTH -> {
+            val currentMonth = today.withDayOfMonth(1)
+            when (startDate) {
+                currentMonth -> "本自然月（$startDate 至 $endDate，截至 $today）"
+                currentMonth.minusMonths(1) -> "上一完整自然月（$startDate 至 $endDate）"
+                else -> "自然月（$startDate 至 $endDate）"
+            }
+        }
+        PeriodKind.YEAR -> if (startDate.year == today.year) {
+            "${startDate.year}年（截至 $today）"
+        } else {
+            "${startDate.year}年（$startDate 至 $endDate）"
+        }
+    }
 }
 
 fun todayReport(records: Iterable<StudyRecord>, now: Instant, zone: ZoneId): PeriodReport =
@@ -109,18 +173,8 @@ fun aggregate(records: Iterable<StudyRecord>, period: ReportPeriod): PeriodRepor
     )
 }
 
-private fun resolveTodayPeriod(now: Instant, zone: ZoneId): ReportPeriod {
-    val date = now.atZone(zone).toLocalDate()
-    val nextDate = date.plusDays(1)
-    return ReportPeriod(
-        kind = PeriodKind.DAY,
-        label = "今日（$date）",
-        startInclusive = date.atStartOfDay(zone).toInstant(),
-        endExclusive = nextDate.atStartOfDay(zone).toInstant(),
-        startDate = date,
-        endDateExclusive = nextDate,
-    )
-}
+private fun resolveTodayPeriod(now: Instant, zone: ZoneId): ReportPeriod =
+    resolveReportPeriod(PeriodKind.DAY, now, zone)
 
 const val MIN_REPORT_YEAR = 1
 const val MAX_REPORT_YEAR = 9998

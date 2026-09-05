@@ -3,8 +3,10 @@ package com.example.studenttimetotalnote
 import com.example.studenttimetotalnote.data.StudyTimerStore
 import com.example.studenttimetotalnote.domain.DefaultStudyTimerRepository
 import com.example.studenttimetotalnote.domain.aggregate
+import com.example.studenttimetotalnote.domain.defaultReportDate
 import com.example.studenttimetotalnote.domain.resolveReportPeriod
 import com.example.studenttimetotalnote.domain.resolveYearReportPeriod
+import com.example.studenttimetotalnote.domain.shiftReportDate
 import com.example.studenttimetotalnote.domain.todayReport
 import com.example.studenttimetotalnote.domain.model.ActiveSession
 import com.example.studenttimetotalnote.domain.model.PeriodKind
@@ -142,6 +144,76 @@ class StudyTimerDomainTest {
     }
 
     @Test
+    fun defaultAndShiftedReportDatesMoveByTheSelectedPeriod() {
+        val now = instant("2026-09-05T12:00:00Z")
+
+        assertEquals(LocalDate.of(2026, 9, 5), defaultReportDate(PeriodKind.DAY, now, zone))
+        assertEquals(LocalDate.of(2026, 8, 24), defaultReportDate(PeriodKind.WEEK, now, zone))
+        assertEquals(LocalDate.of(2026, 8, 1), defaultReportDate(PeriodKind.MONTH, now, zone))
+        assertEquals(LocalDate.of(2026, 1, 1), defaultReportDate(PeriodKind.YEAR, now, zone))
+
+        assertEquals(
+            LocalDate.of(2026, 9, 4),
+            shiftReportDate(PeriodKind.DAY, LocalDate.of(2026, 9, 5), -1),
+        )
+        assertEquals(
+            LocalDate.of(2026, 8, 31),
+            shiftReportDate(PeriodKind.WEEK, LocalDate.of(2026, 8, 24), 1),
+        )
+        assertEquals(
+            LocalDate.of(2026, 9, 1),
+            shiftReportDate(PeriodKind.MONTH, LocalDate.of(2026, 8, 1), 1),
+        )
+        assertEquals(
+            LocalDate.of(2027, 1, 1),
+            shiftReportDate(PeriodKind.YEAR, LocalDate.of(2026, 1, 1), 1),
+        )
+    }
+
+    @Test
+    fun selectedDayWeekAndMonthNormalizeAndShowTheirExactRanges() {
+        val now = instant("2026-09-05T12:00:00Z")
+
+        val day = resolveReportPeriod(
+            PeriodKind.DAY,
+            LocalDate.of(2026, 8, 19),
+            now,
+            zone,
+        )
+        assertEquals(LocalDate.of(2026, 8, 19), day.startDate)
+        assertEquals(LocalDate.of(2026, 8, 20), day.endDateExclusive)
+        assertEquals("日期（2026-08-19）", day.label)
+
+        val week = resolveReportPeriod(
+            PeriodKind.WEEK,
+            LocalDate.of(2026, 8, 12),
+            now,
+            zone,
+        )
+        assertEquals(LocalDate.of(2026, 8, 10), week.startDate)
+        assertEquals(LocalDate.of(2026, 8, 17), week.endDateExclusive)
+        assertEquals("自然周（2026-08-10 至 2026-08-16）", week.label)
+
+        val currentWeek = resolveReportPeriod(
+            PeriodKind.WEEK,
+            LocalDate.of(2026, 9, 3),
+            now,
+            zone,
+        )
+        assertEquals("本自然周（2026-08-31 至 2026-09-06，截至 2026-09-05）", currentWeek.label)
+
+        val month = resolveReportPeriod(
+            PeriodKind.MONTH,
+            LocalDate.of(2026, 1, 17),
+            now,
+            zone,
+        )
+        assertEquals(LocalDate.of(2026, 1, 1), month.startDate)
+        assertEquals(LocalDate.of(2026, 2, 1), month.endDateExclusive)
+        assertEquals("自然月（2026-01-01 至 2026-01-31）", month.label)
+    }
+
+    @Test
     fun annualPeriodsUseNaturalYearAndIdentifyTheExactSelectedYear() {
         val now = instant("2026-09-04T12:00:00Z")
 
@@ -194,6 +266,64 @@ class StudyTimerDomainTest {
         assertEquals(30 * 60_000L, trend[8].durationMs)
         assertTrue(trend[8].emphasized)
         assertEquals(1, trend.count { it.emphasized })
+    }
+
+    @Test
+    fun selectedDayTrendUsesTheWeekContainingThatDay() {
+        val now = instant("2026-09-05T12:00:00Z")
+        val selectedDate = LocalDate.of(2026, 8, 26)
+        val records = listOf(
+            record("周一", "2026-08-24T09:00:00Z", "2026-08-24T09:10:00Z"),
+            record("周三", "2026-08-26T09:00:00Z", "2026-08-26T09:30:00Z"),
+        )
+        val report = aggregate(
+            records,
+            resolveReportPeriod(PeriodKind.DAY, selectedDate, now, zone),
+        )
+
+        val trend = buildTrend(records, report, now, zone)
+
+        assertEquals(listOf("一", "二", "三", "四", "五", "六", "日"), trend.map { it.label })
+        assertEquals(10 * 60_000L, trend[0].durationMs)
+        assertEquals(30 * 60_000L, trend[2].durationMs)
+        assertTrue(trend[2].emphasized)
+        assertEquals(1, trend.count { it.emphasized })
+    }
+
+    @Test
+    fun repositoryLoadsRecordsOnlyFromTheSelectedDayWeekAndMonth() = runBlocking {
+        val repository = DefaultStudyTimerRepository(FakeStudyTimerStore())
+        val firstStart = instant("2026-07-15T09:00:00Z")
+        repository.beginSession("七月", firstStart)
+        repository.finishSession(firstStart.plusSeconds(20 * 60))
+        val secondStart = instant("2026-08-26T09:00:00Z")
+        repository.beginSession("八月", secondStart)
+        repository.finishSession(secondStart.plusSeconds(40 * 60))
+        val now = instant("2026-09-05T12:00:00Z")
+
+        val selectedDay = repository.report(
+            PeriodKind.DAY,
+            LocalDate.of(2026, 8, 26),
+            now,
+            zone,
+        )
+        val selectedWeek = repository.report(
+            PeriodKind.WEEK,
+            LocalDate.of(2026, 8, 24),
+            now,
+            zone,
+        )
+        val selectedMonth = repository.report(
+            PeriodKind.MONTH,
+            LocalDate.of(2026, 7, 1),
+            now,
+            zone,
+        )
+
+        assertEquals(40 * 60_000L, selectedDay.totalDurationMs)
+        assertEquals(40 * 60_000L, selectedWeek.totalDurationMs)
+        assertEquals(20 * 60_000L, selectedMonth.totalDurationMs)
+        assertEquals("七月", selectedMonth.groups.single().noteText)
     }
 
     @Test

@@ -4,7 +4,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -53,8 +52,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.studenttimetotalnote.domain.MAX_REPORT_YEAR
-import com.example.studenttimetotalnote.domain.MIN_REPORT_YEAR
 import com.example.studenttimetotalnote.domain.StudyTimerRepository
 import com.example.studenttimetotalnote.domain.model.NoteAggregate
 import com.example.studenttimetotalnote.domain.model.PeriodKind
@@ -68,6 +65,7 @@ import com.example.studenttimetotalnote.ui.theme.MutedInk
 import com.example.studenttimetotalnote.ui.theme.Paper
 import java.time.Clock
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -76,9 +74,9 @@ object StatisticsSemantics {
     const val Screen = "statistics_screen"
     const val Back = "statistics_back"
     const val PeriodTabs = "statistics_period_tabs"
-    const val YearSelector = "statistics_year_selector"
-    const val PreviousYear = "statistics_previous_year"
-    const val NextYear = "statistics_next_year"
+    const val PeriodSelector = "statistics_period_selector"
+    const val PreviousPeriod = "statistics_previous_period"
+    const val NextPeriod = "statistics_next_period"
     const val PeriodLabel = "statistics_period_label"
     const val PeriodRange = "statistics_period_range"
     const val TotalCard = "statistics_total_card"
@@ -124,8 +122,8 @@ fun StatisticsScreen(
         uiState = uiState,
         onBack = onBack,
         onPeriodSelected = viewModel::selectPeriod,
-        onPreviousYear = viewModel::selectPreviousYear,
-        onNextYear = viewModel::selectNextYear,
+        onPreviousPeriod = viewModel::selectPreviousPeriod,
+        onNextPeriod = viewModel::selectNextPeriod,
         onOpenRecords = viewModel::openRecordsForNote,
         modifier = modifier,
     )
@@ -155,8 +153,8 @@ private fun StatisticsContent(
     uiState: StatisticsUiState,
     onBack: () -> Unit,
     onPeriodSelected: (PeriodKind) -> Unit,
-    onPreviousYear: () -> Unit,
-    onNextYear: () -> Unit,
+    onPreviousPeriod: () -> Unit,
+    onNextPeriod: () -> Unit,
     onOpenRecords: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -175,30 +173,28 @@ private fun StatisticsContent(
         Spacer(modifier = Modifier.height(20.dp))
         StatisticsTopBar(
             selectedPeriod = uiState.selectedPeriod,
-            selectedYear = uiState.selectedYear,
+            selectedDate = uiState.selectedDate,
             onBack = onBack,
             onPeriodSelected = onPeriodSelected,
         )
 
-        if (uiState.selectedPeriod == PeriodKind.YEAR) {
-            Spacer(modifier = Modifier.height(25.dp))
-            YearSelector(
-                year = uiState.selectedYear,
-                isCurrentYear = uiState.isCurrentYear,
-                previousEnabled = uiState.selectedYear > MIN_REPORT_YEAR,
-                nextEnabled = uiState.selectedYear < MAX_REPORT_YEAR,
-                onPreviousYear = onPreviousYear,
-                onNextYear = onNextYear,
-            )
-        }
+        Spacer(modifier = Modifier.height(25.dp))
+        PeriodSelector(
+            kind = uiState.selectedPeriod,
+            selectedDate = uiState.selectedDate,
+            today = uiState.today,
+            previousEnabled = uiState.canSelectPreviousPeriod,
+            nextEnabled = uiState.canSelectNextPeriod,
+            onPreviousPeriod = onPreviousPeriod,
+            onNextPeriod = onNextPeriod,
+        )
 
         if (report?.hasData == true) {
-            Spacer(
-                modifier = Modifier.height(
-                    if (uiState.selectedPeriod == PeriodKind.YEAR) 29.dp else 39.dp,
-                ),
+            Spacer(modifier = Modifier.height(29.dp))
+            PeriodOverview(
+                report = report,
+                today = uiState.today,
             )
-            PeriodOverview(report = report)
 
             Spacer(modifier = Modifier.height(34.dp))
             TrendChart(points = uiState.trend)
@@ -216,7 +212,7 @@ private fun StatisticsContent(
 @Composable
 private fun StatisticsTopBar(
     selectedPeriod: PeriodKind,
-    selectedYear: Int,
+    selectedDate: LocalDate,
     onBack: () -> Unit,
     onPeriodSelected: (PeriodKind) -> Unit,
 ) {
@@ -252,11 +248,9 @@ private fun StatisticsTopBar(
                     .size(44.dp)
                     .testTag(StatisticsSemantics.PeriodTabs)
                     .semantics {
-                        contentDescription = if (selectedPeriod == PeriodKind.YEAR) {
-                            "选择统计周期，年度，${selectedYear}年"
-                        } else {
-                            "选择统计周期，${periodDisplayLabel(selectedPeriod)}"
-                        }
+                        contentDescription = "选择统计周期，" +
+                            "${periodModeLabel(selectedPeriod)}，" +
+                            periodNavigationCopy(selectedPeriod, selectedDate, selectedDate).title
                     },
             ) {
                 FilterIcon()
@@ -293,74 +287,76 @@ private fun StatisticsTopBar(
 }
 
 @Composable
-private fun YearSelector(
-    year: Int,
-    isCurrentYear: Boolean,
+private fun PeriodSelector(
+    kind: PeriodKind,
+    selectedDate: LocalDate,
+    today: LocalDate,
     previousEnabled: Boolean,
     nextEnabled: Boolean,
-    onPreviousYear: () -> Unit,
-    onNextYear: () -> Unit,
+    onPreviousPeriod: () -> Unit,
+    onNextPeriod: () -> Unit,
 ) {
+    val copy = periodNavigationCopy(kind, selectedDate, today)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag(StatisticsSemantics.YearSelector)
+            .testTag(StatisticsSemantics.PeriodSelector)
             .semantics {
-                contentDescription = if (isCurrentYear) {
-                    "${year}年，今年，实时累计"
-                } else {
-                    "${year}年，自然年统计"
-                }
+                contentDescription = "${copy.title}，${copy.subtitle}"
             },
-        horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(
-            onClick = onPreviousYear,
+            onClick = onPreviousPeriod,
             enabled = previousEnabled,
             modifier = Modifier
                 .size(40.dp)
-                .testTag(StatisticsSemantics.PreviousYear)
-                .semantics { contentDescription = "查看${year - 1}年" },
+                .testTag(StatisticsSemantics.PreviousPeriod)
+                .semantics { contentDescription = previousPeriodDescription(kind) },
         ) {
-            YearArrowIcon(
+            PeriodArrowIcon(
                 pointsForward = false,
                 enabled = previousEnabled,
             )
         }
-        Spacer(modifier = Modifier.width(21.dp))
+        Spacer(modifier = Modifier.width(10.dp))
         Column(
-            modifier = Modifier.width(132.dp),
+            modifier = Modifier.weight(1f),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = "$year 年",
+                text = copy.title,
                 color = Ink,
-                fontSize = 24.sp,
+                fontSize = when (kind) {
+                    PeriodKind.WEEK -> 19.sp
+                    PeriodKind.YEAR -> 24.sp
+                    else -> 22.sp
+                },
                 lineHeight = 29.sp,
                 fontWeight = FontWeight.Light,
-                letterSpacing = 0.8.sp,
+                letterSpacing = if (kind == PeriodKind.WEEK) 0.sp else 0.5.sp,
+                maxLines = 1,
                 style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
             )
             Spacer(modifier = Modifier.height(3.dp))
             Text(
-                text = if (isCurrentYear) "今年 · 实时累计" else "自然年",
-                color = if (isCurrentYear) Cobalt else MutedInk,
+                text = copy.subtitle,
+                color = if (copy.isLive) Cobalt else MutedInk,
                 fontSize = 11.sp,
                 lineHeight = 16.sp,
                 letterSpacing = 0.5.sp,
             )
         }
-        Spacer(modifier = Modifier.width(21.dp))
+        Spacer(modifier = Modifier.width(10.dp))
         IconButton(
-            onClick = onNextYear,
+            onClick = onNextPeriod,
             enabled = nextEnabled,
             modifier = Modifier
                 .size(40.dp)
-                .testTag(StatisticsSemantics.NextYear)
-                .semantics { contentDescription = "查看${year + 1}年" },
+                .testTag(StatisticsSemantics.NextPeriod)
+                .semantics { contentDescription = nextPeriodDescription(kind) },
         ) {
-            YearArrowIcon(
+            PeriodArrowIcon(
                 pointsForward = true,
                 enabled = nextEnabled,
             )
@@ -369,7 +365,7 @@ private fun YearSelector(
 }
 
 @Composable
-private fun YearArrowIcon(
+private fun PeriodArrowIcon(
     pointsForward: Boolean,
     enabled: Boolean,
 ) {
@@ -451,17 +447,20 @@ private fun FilterIcon() {
 }
 
 @Composable
-private fun PeriodOverview(report: PeriodReport) {
+private fun PeriodOverview(
+    report: PeriodReport,
+    today: LocalDate,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .testTag(StatisticsSemantics.PeriodLabel)
             .semantics {
-                contentDescription = "${periodDisplayLabel(report.kind)}，${report.label}"
+                contentDescription = "${periodModeLabel(report.kind)}，${report.label}"
             },
     ) {
         Text(
-            text = if (report.kind == PeriodKind.YEAR) "年度累计" else periodDisplayLabel(report.kind),
+            text = periodOverviewLabel(report, today),
             color = MutedInk,
             fontSize = 15.sp,
             letterSpacing = 0.8.sp,
@@ -896,12 +895,107 @@ private fun DeleteRecordConfirmation(
     }
 }
 
-private fun periodDisplayLabel(kind: PeriodKind): String = when (kind) {
-    PeriodKind.DAY -> "今日"
-    PeriodKind.WEEK -> "上一周"
-    PeriodKind.MONTH -> "上个月"
-    PeriodKind.YEAR -> "年度"
+private data class PeriodNavigationCopy(
+    val title: String,
+    val subtitle: String,
+    val isLive: Boolean,
+)
+
+private fun periodNavigationCopy(
+    kind: PeriodKind,
+    selectedDate: LocalDate,
+    today: LocalDate,
+): PeriodNavigationCopy = when (kind) {
+    PeriodKind.DAY -> {
+        val subtitle = when (selectedDate) {
+            today -> "今天 · 实时累计"
+            today.minusDays(1) -> "昨天"
+            today.plusDays(1) -> "明天"
+            else -> chineseWeekday(selectedDate)
+        }
+        PeriodNavigationCopy(
+            title = "${selectedDate.year}年${selectedDate.monthValue}月${selectedDate.dayOfMonth}日",
+            subtitle = subtitle,
+            isLive = selectedDate == today,
+        )
+    }
+    PeriodKind.WEEK -> {
+        val start = selectedDate
+        val end = start.plusDays(6)
+        val currentWeek = mondayOf(today)
+        val title = "${start.monthValue}月${start.dayOfMonth}日 — " +
+            "${end.monthValue}月${end.dayOfMonth}日"
+        val yearContext = if (start.year == end.year) {
+            "${start.year}年"
+        } else {
+            "${start.year}—${end.year}年"
+        }
+        val subtitle = when (start) {
+            currentWeek -> "$yearContext · 本周实时累计"
+            currentWeek.minusWeeks(1) -> "$yearContext · 上一完整自然周"
+            else -> "$yearContext · 自然周"
+        }
+        PeriodNavigationCopy(
+            title = title,
+            subtitle = subtitle,
+            isLive = start == currentWeek,
+        )
+    }
+    PeriodKind.MONTH -> {
+        val currentMonth = today.withDayOfMonth(1)
+        val subtitle = when (selectedDate) {
+            currentMonth -> "本月 · 实时累计"
+            currentMonth.minusMonths(1) -> "上个月 · 完整自然月"
+            else -> "自然月"
+        }
+        PeriodNavigationCopy(
+            title = "${selectedDate.year}年${selectedDate.monthValue}月",
+            subtitle = subtitle,
+            isLive = selectedDate == currentMonth,
+        )
+    }
+    PeriodKind.YEAR -> PeriodNavigationCopy(
+        title = "${selectedDate.year} 年",
+        subtitle = if (selectedDate.year == today.year) "今年 · 实时累计" else "自然年",
+        isLive = selectedDate.year == today.year,
+    )
 }
+
+private fun periodModeLabel(kind: PeriodKind): String = when (kind) {
+    PeriodKind.DAY -> "日统计"
+    PeriodKind.WEEK -> "周统计"
+    PeriodKind.MONTH -> "月统计"
+    PeriodKind.YEAR -> "年统计"
+}
+
+private fun periodOverviewLabel(report: PeriodReport, today: LocalDate): String =
+    when (report.kind) {
+        PeriodKind.DAY -> if (report.period.startDate == today) "今日" else "当日累计"
+        PeriodKind.WEEK -> "当周累计"
+        PeriodKind.MONTH -> "当月累计"
+        PeriodKind.YEAR -> "年度累计"
+    }
+
+private fun previousPeriodDescription(kind: PeriodKind): String = when (kind) {
+    PeriodKind.DAY -> "查看前一天"
+    PeriodKind.WEEK -> "查看前一周"
+    PeriodKind.MONTH -> "查看上个月"
+    PeriodKind.YEAR -> "查看上一年"
+}
+
+private fun nextPeriodDescription(kind: PeriodKind): String = when (kind) {
+    PeriodKind.DAY -> "查看后一天"
+    PeriodKind.WEEK -> "查看后一周"
+    PeriodKind.MONTH -> "查看下个月"
+    PeriodKind.YEAR -> "查看下一年"
+}
+
+private fun mondayOf(date: LocalDate): LocalDate =
+    date.minusDays((date.dayOfWeek.value - 1).toLong())
+
+private fun chineseWeekday(date: LocalDate): String =
+    listOf("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
+        .elementAt(date.dayOfWeek.value - 1)
 
 private fun formatRecordDate(startedAtEpochMs: Long, zone: ZoneId): String =
     Instant.ofEpochMilli(startedAtEpochMs).atZone(zone).format(RecordDateFormatter)

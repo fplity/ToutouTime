@@ -2,9 +2,10 @@ package com.example.studenttimetotalnote.ui.statistics
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.studenttimetotalnote.domain.MAX_REPORT_YEAR
-import com.example.studenttimetotalnote.domain.MIN_REPORT_YEAR
 import com.example.studenttimetotalnote.domain.StudyTimerRepository
+import com.example.studenttimetotalnote.domain.canShiftReportDate
+import com.example.studenttimetotalnote.domain.defaultReportDate
+import com.example.studenttimetotalnote.domain.shiftReportDate
 import com.example.studenttimetotalnote.domain.model.PeriodKind
 import com.example.studenttimetotalnote.domain.model.PeriodReport
 import com.example.studenttimetotalnote.domain.model.StudyRecord
@@ -38,8 +39,8 @@ data class StatisticsRecordItem(
 }
 
 data class StatisticsUiState(
-    val currentYear: Int,
-    val selectedYear: Int = currentYear,
+    val today: LocalDate,
+    val selectedDate: LocalDate = today,
     val selectedPeriod: PeriodKind = PeriodKind.DAY,
     val report: PeriodReport? = null,
     val trend: List<TrendPoint> = emptyList(),
@@ -55,8 +56,11 @@ data class StatisticsUiState(
             records.filter { it.noteText == note }
         }.orEmpty()
 
-    val isCurrentYear: Boolean
-        get() = selectedYear == currentYear
+    val canSelectPreviousPeriod: Boolean
+        get() = canShiftReportDate(selectedPeriod, selectedDate, -1)
+
+    val canSelectNextPeriod: Boolean
+        get() = canShiftReportDate(selectedPeriod, selectedDate, 1)
 }
 
 /** Loads reports and owns the deliberate, ID-scoped deletion flow. */
@@ -66,31 +70,40 @@ class StatisticsViewModel(
     private val clock: Clock = Clock.systemDefaultZone(),
     private val zone: ZoneId = ZoneId.systemDefault(),
 ) : ViewModel() {
-    private val initialYear = clock.instant()
-        .atZone(zone)
-        .year
-        .coerceIn(MIN_REPORT_YEAR, MAX_REPORT_YEAR)
+    private val initialNow = clock.instant()
+    private val initialToday = initialNow.atZone(zone).toLocalDate()
+    private val initialDate = defaultReportDate(initialPeriod, initialNow, zone)
     private val _uiState = MutableStateFlow(
         StatisticsUiState(
-            currentYear = initialYear,
+            today = initialToday,
+            selectedDate = initialDate,
             selectedPeriod = initialPeriod,
         ),
     )
     val uiState: StateFlow<StatisticsUiState> = _uiState.asStateFlow()
 
     init {
-        load(initialPeriod, initialYear)
+        load(initialPeriod, initialDate)
     }
 
     fun selectPeriod(kind: PeriodKind) {
         val state = _uiState.value
-        if (state.selectedPeriod == kind && state.report != null) return
-        val targetYear = if (kind == PeriodKind.YEAR) state.currentYear else state.selectedYear
+        val now = clock.instant()
+        val today = now.atZone(zone).toLocalDate()
+        val targetDate = defaultReportDate(kind, now, zone)
+        if (
+            state.selectedPeriod == kind &&
+            state.selectedDate == targetDate &&
+            state.report != null
+        ) {
+            return
+        }
 
         _uiState.update {
             it.copy(
+                today = today,
                 selectedPeriod = kind,
-                selectedYear = targetYear,
+                selectedDate = targetDate,
                 report = null,
                 trend = emptyList(),
                 records = emptyList(),
@@ -101,26 +114,27 @@ class StatisticsViewModel(
                 deleteError = null,
             )
         }
-        load(kind, targetYear)
+        load(kind, targetDate)
     }
 
-    fun selectPreviousYear() {
-        selectYear(_uiState.value.selectedYear - 1)
+    fun selectPreviousPeriod() {
+        shiftSelectedPeriod(-1)
     }
 
-    fun selectNextYear() {
-        selectYear(_uiState.value.selectedYear + 1)
+    fun selectNextPeriod() {
+        shiftSelectedPeriod(1)
     }
 
-    fun selectYear(year: Int) {
-        val targetYear = year.coerceIn(MIN_REPORT_YEAR, MAX_REPORT_YEAR)
+    private fun shiftSelectedPeriod(steps: Int) {
         val state = _uiState.value
-        if (state.selectedPeriod != PeriodKind.YEAR) return
-        if (state.selectedYear == targetYear && state.report != null) return
+        if (!canShiftReportDate(state.selectedPeriod, state.selectedDate, steps)) return
+        val targetDate = shiftReportDate(state.selectedPeriod, state.selectedDate, steps)
+        val today = clock.instant().atZone(zone).toLocalDate()
 
         _uiState.update {
             it.copy(
-                selectedYear = targetYear,
+                today = today,
+                selectedDate = targetDate,
                 report = null,
                 trend = emptyList(),
                 records = emptyList(),
@@ -131,20 +145,22 @@ class StatisticsViewModel(
                 deleteError = null,
             )
         }
-        load(PeriodKind.YEAR, targetYear)
+        load(state.selectedPeriod, targetDate)
     }
 
     fun refresh() {
         val state = _uiState.value
+        val today = clock.instant().atZone(zone).toLocalDate()
         _uiState.update {
             it.copy(
+                today = today,
                 pendingDelete = null,
                 isLoading = true,
                 isDeleting = false,
                 deleteError = null,
             )
         }
-        load(state.selectedPeriod, state.selectedYear)
+        load(state.selectedPeriod, state.selectedDate)
     }
 
     fun openRecordsForNote(noteText: String) {
@@ -191,9 +207,9 @@ class StatisticsViewModel(
         viewModelScope.launch {
             runCatching {
                 check(repository.deleteRecord(record.id)) { "Record no longer exists" }
-                loadSnapshot(state.selectedPeriod, state.selectedYear)
+                loadSnapshot(state.selectedPeriod, state.selectedDate)
             }.onSuccess { snapshot ->
-                if (isCurrentSelection(state.selectedPeriod, state.selectedYear)) {
+                if (isCurrentSelection(state.selectedPeriod, state.selectedDate)) {
                     val openedNote = state.openedNoteText?.takeIf { note ->
                         snapshot.records.any { it.noteText == note }
                     }
@@ -221,12 +237,12 @@ class StatisticsViewModel(
         }
     }
 
-    private fun load(kind: PeriodKind, year: Int) {
+    private fun load(kind: PeriodKind, selectedDate: LocalDate) {
         viewModelScope.launch {
             runCatching {
-                loadSnapshot(kind, year)
+                loadSnapshot(kind, selectedDate)
             }.onSuccess { snapshot ->
-                if (isCurrentSelection(kind, year)) {
+                if (isCurrentSelection(kind, selectedDate)) {
                     val openedNote = _uiState.value.openedNoteText?.takeIf { note ->
                         snapshot.records.any { it.noteText == note }
                     }
@@ -244,7 +260,7 @@ class StatisticsViewModel(
                     }
                 }
             }.onFailure {
-                if (isCurrentSelection(kind, year)) {
+                if (isCurrentSelection(kind, selectedDate)) {
                     _uiState.update {
                         it.copy(
                             report = null,
@@ -262,13 +278,12 @@ class StatisticsViewModel(
         }
     }
 
-    private suspend fun loadSnapshot(kind: PeriodKind, year: Int): StatisticsSnapshot {
+    private suspend fun loadSnapshot(
+        kind: PeriodKind,
+        selectedDate: LocalDate,
+    ): StatisticsSnapshot {
         val now = clock.instant()
-        val report = if (kind == PeriodKind.YEAR) {
-            repository.yearReport(year, now, zone)
-        } else {
-            repository.report(kind, now, zone)
-        }
+        val report = repository.report(kind, selectedDate, now, zone)
         val allRecords = repository.observeRecords()
         return StatisticsSnapshot(
             report = report,
@@ -277,10 +292,9 @@ class StatisticsViewModel(
         )
     }
 
-    private fun isCurrentSelection(kind: PeriodKind, year: Int): Boolean {
+    private fun isCurrentSelection(kind: PeriodKind, selectedDate: LocalDate): Boolean {
         val state = _uiState.value
-        return state.selectedPeriod == kind &&
-            (kind != PeriodKind.YEAR || state.selectedYear == year)
+        return state.selectedPeriod == kind && state.selectedDate == selectedDate
     }
 }
 
@@ -321,7 +335,7 @@ internal fun buildTrend(
     zone: ZoneId,
 ): List<TrendPoint> {
     val buckets = when (report.kind) {
-        PeriodKind.DAY -> currentNaturalWeekBuckets(now, zone)
+        PeriodKind.DAY -> weekContainingDateBuckets(report.period.startDate, zone)
         PeriodKind.WEEK -> dailyBuckets(report.period.startDate, 7, zone)
         PeriodKind.MONTH -> monthlyBuckets(report, zone)
         PeriodKind.YEAR -> yearlyBuckets(report, zone)
@@ -331,23 +345,21 @@ internal fun buildTrend(
             overlapDuration(record, bucket.startInclusive, bucket.endExclusive)
         }
     }
-    val emphasizedIndex = when (report.kind) {
-        PeriodKind.DAY -> {
-            val today = now.atZone(zone).toLocalDate()
-            buckets.indexOfFirst { it.startDate == today }.coerceAtLeast(0)
-        }
-        PeriodKind.WEEK,
-        PeriodKind.MONTH,
-        -> durations.indices.maxByOrNull { durations[it] } ?: 0
-        PeriodKind.YEAR -> {
-            val nowDate = now.atZone(zone).toLocalDate()
-            if (report.period.startDate.year == nowDate.year) {
-                nowDate.monthValue - 1
-            } else {
-                durations.indices.maxByOrNull { durations[it] } ?: 0
+    val today = now.atZone(zone).toLocalDate()
+    val focusDate = when {
+        report.kind == PeriodKind.DAY -> report.period.startDate
+        !today.isBefore(report.period.startDate) &&
+            today.isBefore(report.period.endDateExclusive) -> today
+        else -> null
+    }
+    val emphasizedIndex = focusDate
+        ?.let { date ->
+            buckets.indexOfFirst { bucket ->
+                !date.isBefore(bucket.startDate) && date.isBefore(bucket.endDateExclusive)
             }
         }
-    }
+        ?.takeIf { it >= 0 }
+        ?: (durations.indices.maxByOrNull { durations[it] } ?: 0)
     return buckets.mapIndexed { index, bucket ->
         TrendPoint(
             label = bucket.label,
@@ -360,13 +372,13 @@ internal fun buildTrend(
 private data class TrendBucket(
     val label: String,
     val startDate: LocalDate,
+    val endDateExclusive: LocalDate,
     val startInclusive: Instant,
     val endExclusive: Instant,
 )
 
-private fun currentNaturalWeekBuckets(now: Instant, zone: ZoneId): List<TrendBucket> {
-    val today = now.atZone(zone).toLocalDate()
-    val monday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+private fun weekContainingDateBuckets(date: LocalDate, zone: ZoneId): List<TrendBucket> {
+    val monday = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
     return dailyBuckets(monday, 7, zone)
 }
 
@@ -382,6 +394,7 @@ private fun dailyBuckets(
         TrendBucket(
             label = weekdayLabels.getOrElse(index) { start.dayOfMonth.toString() },
             startDate = start,
+            endDateExclusive = end,
             startInclusive = start.atStartOfDay(zone).toInstant(),
             endExclusive = end.atStartOfDay(zone).toInstant(),
         )
@@ -400,6 +413,7 @@ private fun monthlyBuckets(report: PeriodReport, zone: ZoneId): List<TrendBucket
         TrendBucket(
             label = start.dayOfMonth.toString(),
             startDate = start,
+            endDateExclusive = end,
             startInclusive = start.atStartOfDay(zone).toInstant(),
             endExclusive = end.atStartOfDay(zone).toInstant(),
         )
@@ -413,6 +427,7 @@ private fun yearlyBuckets(report: PeriodReport, zone: ZoneId): List<TrendBucket>
         TrendBucket(
             label = "${index + 1}月",
             startDate = start,
+            endDateExclusive = end,
             startInclusive = start.atStartOfDay(zone).toInstant(),
             endExclusive = end.atStartOfDay(zone).toInstant(),
         )

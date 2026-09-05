@@ -5,6 +5,7 @@ import com.example.studenttimetotalnote.domain.model.PeriodKind
 import com.example.studenttimetotalnote.domain.model.PeriodReport
 import com.example.studenttimetotalnote.domain.model.StudyRecord
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 
 interface StudyTimerRepository {
@@ -21,6 +22,13 @@ interface StudyTimerRepository {
     suspend fun deleteRecord(recordId: Long): Boolean
 
     suspend fun report(kind: PeriodKind, now: Instant, zone: ZoneId): PeriodReport
+
+    suspend fun report(
+        kind: PeriodKind,
+        selectedDate: LocalDate,
+        now: Instant,
+        zone: ZoneId,
+    ): PeriodReport
 
     suspend fun yearReport(year: Int, now: Instant, zone: ZoneId): PeriodReport
 

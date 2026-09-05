@@ -9,7 +9,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.studenttimetotalnote.ui.home.HomeSemantics
 import com.example.studenttimetotalnote.ui.components.StudyTimerSemantics
 import com.example.studenttimetotalnote.ui.statistics.StatisticsSemantics
-import java.time.Year
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.temporal.TemporalAdjusters
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -58,16 +60,66 @@ class StudyTimerNavigationSmokeTest {
 
     @Test
     fun annualPeriodShowsTheExactYearAndSwitchesToAFutureYear() {
-        val currentYear = Year.now().value
+        val currentYear = LocalDate.now().year
         composeRule.onNodeWithTag(HomeSemantics.TodaySummary).performClick()
         composeRule.onNodeWithTag(StatisticsSemantics.PeriodTabs).performClick()
         composeRule.onNodeWithText("年度").assertIsDisplayed().performClick()
 
-        composeRule.onNodeWithTag(StatisticsSemantics.YearSelector).assertIsDisplayed()
+        composeRule.onNodeWithTag(StatisticsSemantics.PeriodSelector).assertIsDisplayed()
         composeRule.onNodeWithText("$currentYear 年").assertIsDisplayed()
-        composeRule.onNodeWithTag(StatisticsSemantics.NextYear).performClick()
+        composeRule.onNodeWithTag(StatisticsSemantics.NextPeriod).performClick()
         composeRule.onNodeWithText("${currentYear + 1} 年").assertIsDisplayed()
-        composeRule.onNodeWithTag(StatisticsSemantics.PreviousYear).performClick()
+        composeRule.onNodeWithTag(StatisticsSemantics.PreviousPeriod).performClick()
         composeRule.onNodeWithText("$currentYear 年").assertIsDisplayed()
+    }
+
+    @Test
+    fun dayWeekAndMonthPeriodsCanMoveBackwardAndForward() {
+        val today = LocalDate.now()
+        composeRule.onNodeWithTag(HomeSemantics.TodaySummary).performClick()
+
+        composeRule.onNodeWithTag(StatisticsSemantics.PeriodSelector).assertIsDisplayed()
+        composeRule.onNodeWithText(fullDateTitle(today)).assertIsDisplayed()
+        composeRule.onNodeWithTag(StatisticsSemantics.PreviousPeriod).performClick()
+        composeRule.onNodeWithText(fullDateTitle(today.minusDays(1))).assertIsDisplayed()
+        composeRule.onNodeWithTag(StatisticsSemantics.PeriodTabs).performClick()
+        composeRule.onNodeWithText("今日").performClick()
+        composeRule.onNodeWithText(fullDateTitle(today)).assertIsDisplayed()
+
+        composeRule.onNodeWithTag(StatisticsSemantics.PeriodTabs).performClick()
+        composeRule.onNodeWithText("上一周").performClick()
+        val currentWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        val previousWeek = currentWeek.minusWeeks(1)
+        composeRule.onNodeWithText(weekTitle(previousWeek)).assertIsDisplayed()
+        composeRule.onNodeWithTag(StatisticsSemantics.NextPeriod).performClick()
+        composeRule.onNodeWithText(weekTitle(currentWeek)).assertIsDisplayed()
+        composeRule.onNodeWithText("${weekYearContext(currentWeek)} · 本周实时累计")
+            .assertIsDisplayed()
+
+        composeRule.onNodeWithTag(StatisticsSemantics.PeriodTabs).performClick()
+        composeRule.onNodeWithText("上个月").performClick()
+        val currentMonth = today.withDayOfMonth(1)
+        val previousMonth = currentMonth.minusMonths(1)
+        composeRule.onNodeWithText(monthTitle(previousMonth)).assertIsDisplayed()
+        composeRule.onNodeWithTag(StatisticsSemantics.NextPeriod).performClick()
+        composeRule.onNodeWithText(monthTitle(currentMonth)).assertIsDisplayed()
+        composeRule.onNodeWithText("本月 · 实时累计").assertIsDisplayed()
+    }
+
+    private fun fullDateTitle(date: LocalDate): String =
+        "${date.year}年${date.monthValue}月${date.dayOfMonth}日"
+
+    private fun monthTitle(date: LocalDate): String =
+        "${date.year}年${date.monthValue}月"
+
+    private fun weekTitle(start: LocalDate): String {
+        val end = start.plusDays(6)
+        return "${start.monthValue}月${start.dayOfMonth}日 — " +
+            "${end.monthValue}月${end.dayOfMonth}日"
+    }
+
+    private fun weekYearContext(start: LocalDate): String {
+        val end = start.plusDays(6)
+        return if (start.year == end.year) "${start.year}年" else "${start.year}—${end.year}年"
     }
 }

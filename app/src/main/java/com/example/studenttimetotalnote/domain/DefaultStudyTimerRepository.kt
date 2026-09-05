@@ -6,6 +6,7 @@ import com.example.studenttimetotalnote.domain.model.PeriodKind
 import com.example.studenttimetotalnote.domain.model.PeriodReport
 import com.example.studenttimetotalnote.domain.model.StudyRecord
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 
 class DefaultStudyTimerRepository(
@@ -32,6 +33,16 @@ class DefaultStudyTimerRepository(
 
     override suspend fun report(kind: PeriodKind, now: Instant, zone: ZoneId): PeriodReport =
         aggregate(observeRecords(), resolveReportPeriod(kind, now, zone))
+
+    override suspend fun report(
+        kind: PeriodKind,
+        selectedDate: LocalDate,
+        now: Instant,
+        zone: ZoneId,
+    ): PeriodReport = aggregate(
+        observeRecords(),
+        resolveReportPeriod(kind, selectedDate, now, zone),
+    )
 
     override suspend fun yearReport(year: Int, now: Instant, zone: ZoneId): PeriodReport =
         aggregate(observeRecords(), resolveYearReportPeriod(year, now, zone))
