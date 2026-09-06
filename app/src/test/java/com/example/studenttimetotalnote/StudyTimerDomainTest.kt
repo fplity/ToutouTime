@@ -3,6 +3,7 @@ package com.example.studenttimetotalnote
 import com.example.studenttimetotalnote.data.StudyTimerStore
 import com.example.studenttimetotalnote.domain.DefaultStudyTimerRepository
 import com.example.studenttimetotalnote.domain.aggregate
+import com.example.studenttimetotalnote.domain.canShiftReportDate
 import com.example.studenttimetotalnote.domain.defaultReportDate
 import com.example.studenttimetotalnote.domain.resolveReportPeriod
 import com.example.studenttimetotalnote.domain.resolveYearReportPeriod
@@ -151,6 +152,9 @@ class StudyTimerDomainTest {
         assertEquals(LocalDate.of(2026, 8, 24), defaultReportDate(PeriodKind.WEEK, now, zone))
         assertEquals(LocalDate.of(2026, 8, 1), defaultReportDate(PeriodKind.MONTH, now, zone))
         assertEquals(LocalDate.of(2026, 1, 1), defaultReportDate(PeriodKind.YEAR, now, zone))
+        assertEquals(LocalDate.of(2026, 9, 5), defaultReportDate(PeriodKind.ALL, now, zone))
+        assertFalse(canShiftReportDate(PeriodKind.ALL, LocalDate.of(2026, 9, 5), -1))
+        assertFalse(canShiftReportDate(PeriodKind.ALL, LocalDate.of(2026, 9, 5), 1))
 
         assertEquals(
             LocalDate.of(2026, 9, 4),
@@ -337,6 +341,41 @@ class StudyTimerDomainTest {
         assertEquals(45 * 60_000L, repository.yearReport(2026, now, zone).totalDurationMs)
         assertTrue(repository.deleteRecord(record.id))
         assertFalse(repository.yearReport(2026, now, zone).hasData)
+    }
+
+    @Test
+    fun allTimeReportCombinesEveryYearAndReflectsRecordDeletion() = runBlocking {
+        val repository = DefaultStudyTimerRepository(FakeStudyTimerStore())
+        val firstStart = instant("2024-03-10T09:00:00Z")
+        repository.beginSession("Java", firstStart)
+        val first = repository.finishSession(firstStart.plusSeconds(30 * 60))!!
+        val secondStart = instant("2026-08-26T09:00:00Z")
+        repository.beginSession("Java", secondStart)
+        val second = repository.finishSession(secondStart.plusSeconds(20 * 60))!!
+        val thirdStart = instant("2027-01-02T09:00:00Z")
+        repository.beginSession("数学", thirdStart)
+        val third = repository.finishSession(thirdStart.plusSeconds(10 * 60))!!
+        val now = instant("2026-09-05T12:00:00Z")
+
+        val report = repository.report(PeriodKind.ALL, now, zone)
+
+        assertEquals(PeriodKind.ALL, report.kind)
+        assertEquals("使用偷偷时间以来", report.label)
+        assertEquals(60 * 60_000L, report.totalDurationMs)
+        assertEquals(listOf("Java", "数学"), report.groups.map { it.noteText })
+        assertEquals(50 * 60_000L, report.groups.first().durationMs)
+        assertEquals(2, report.groups.first().recordCount)
+        assertEquals(
+            listOf(third.id, second.id, first.id),
+            recordsForReport(repository.observeRecords(), report).map { it.id },
+        )
+        assertTrue(buildTrend(repository.observeRecords(), report, now, zone).isEmpty())
+
+        assertTrue(repository.deleteRecord(first.id))
+        val updated = repository.report(PeriodKind.ALL, now, zone)
+        assertEquals(30 * 60_000L, updated.totalDurationMs)
+        assertEquals(20 * 60_000L, updated.groups.single { it.noteText == "Java" }.durationMs)
+        assertEquals(1, updated.groups.single { it.noteText == "Java" }.recordCount)
     }
 
     @Test

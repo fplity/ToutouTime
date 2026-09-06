@@ -95,6 +95,7 @@ private val PeriodChoices = listOf(
     PeriodKind.WEEK to "上一周",
     PeriodKind.MONTH to "上个月",
     PeriodKind.YEAR to "年度",
+    PeriodKind.ALL to "使用以来",
 )
 private val RecordDateFormatter = DateTimeFormatter.ofPattern("yyyy年M月d日 HH:mm", Locale.CHINA)
 private val Destructive = Color(0xFFB4433D)
@@ -196,10 +197,13 @@ private fun StatisticsContent(
                 today = uiState.today,
             )
 
-            Spacer(modifier = Modifier.height(34.dp))
-            TrendChart(points = uiState.trend)
-
-            Spacer(modifier = Modifier.height(51.dp))
+            if (uiState.trend.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(34.dp))
+                TrendChart(points = uiState.trend)
+                Spacer(modifier = Modifier.height(51.dp))
+            } else {
+                Spacer(modifier = Modifier.height(34.dp))
+            }
             LearningContent(
                 groups = report.groups,
                 onOpenRecords = onOpenRecords,
@@ -306,18 +310,22 @@ private fun PeriodSelector(
             },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(
-            onClick = onPreviousPeriod,
-            enabled = previousEnabled,
-            modifier = Modifier
-                .size(40.dp)
-                .testTag(StatisticsSemantics.PreviousPeriod)
-                .semantics { contentDescription = previousPeriodDescription(kind) },
-        ) {
-            PeriodArrowIcon(
-                pointsForward = false,
+        if (kind == PeriodKind.ALL) {
+            Spacer(modifier = Modifier.size(40.dp))
+        } else {
+            IconButton(
+                onClick = onPreviousPeriod,
                 enabled = previousEnabled,
-            )
+                modifier = Modifier
+                    .size(40.dp)
+                    .testTag(StatisticsSemantics.PreviousPeriod)
+                    .semantics { contentDescription = previousPeriodDescription(kind) },
+            ) {
+                PeriodArrowIcon(
+                    pointsForward = false,
+                    enabled = previousEnabled,
+                )
+            }
         }
         Spacer(modifier = Modifier.width(10.dp))
         Column(
@@ -348,18 +356,22 @@ private fun PeriodSelector(
             )
         }
         Spacer(modifier = Modifier.width(10.dp))
-        IconButton(
-            onClick = onNextPeriod,
-            enabled = nextEnabled,
-            modifier = Modifier
-                .size(40.dp)
-                .testTag(StatisticsSemantics.NextPeriod)
-                .semantics { contentDescription = nextPeriodDescription(kind) },
-        ) {
-            PeriodArrowIcon(
-                pointsForward = true,
+        if (kind == PeriodKind.ALL) {
+            Spacer(modifier = Modifier.size(40.dp))
+        } else {
+            IconButton(
+                onClick = onNextPeriod,
                 enabled = nextEnabled,
-            )
+                modifier = Modifier
+                    .size(40.dp)
+                    .testTag(StatisticsSemantics.NextPeriod)
+                    .semantics { contentDescription = nextPeriodDescription(kind) },
+            ) {
+                PeriodArrowIcon(
+                    pointsForward = true,
+                    enabled = nextEnabled,
+                )
+            }
         }
     }
 }
@@ -840,7 +852,7 @@ private fun DeleteRecordConfirmation(
                 )
                 Spacer(modifier = Modifier.height(18.dp))
                 Text(
-                    text = "删除后，这段时间不会再计入今日、周、月或年度统计，且无法恢复。",
+                    text = "删除后，这段时间不会再计入任何统计，且无法恢复。",
                     color = MutedInk,
                     fontSize = 13.sp,
                     lineHeight = 20.sp,
@@ -959,6 +971,11 @@ private fun periodNavigationCopy(
         subtitle = if (selectedDate.year == today.year) "今年 · 实时累计" else "自然年",
         isLive = selectedDate.year == today.year,
     )
+    PeriodKind.ALL -> PeriodNavigationCopy(
+        title = "使用以来",
+        subtitle = "全部学习记录",
+        isLive = false,
+    )
 }
 
 private fun periodModeLabel(kind: PeriodKind): String = when (kind) {
@@ -966,6 +983,7 @@ private fun periodModeLabel(kind: PeriodKind): String = when (kind) {
     PeriodKind.WEEK -> "周统计"
     PeriodKind.MONTH -> "月统计"
     PeriodKind.YEAR -> "年统计"
+    PeriodKind.ALL -> "全部统计"
 }
 
 private fun periodOverviewLabel(report: PeriodReport, today: LocalDate): String =
@@ -974,6 +992,7 @@ private fun periodOverviewLabel(report: PeriodReport, today: LocalDate): String 
         PeriodKind.WEEK -> "当周累计"
         PeriodKind.MONTH -> "当月累计"
         PeriodKind.YEAR -> "年度累计"
+        PeriodKind.ALL -> "总学习时间"
     }
 
 private fun previousPeriodDescription(kind: PeriodKind): String = when (kind) {
@@ -981,6 +1000,7 @@ private fun previousPeriodDescription(kind: PeriodKind): String = when (kind) {
     PeriodKind.WEEK -> "查看前一周"
     PeriodKind.MONTH -> "查看上个月"
     PeriodKind.YEAR -> "查看上一年"
+    PeriodKind.ALL -> "使用以来没有上一周期"
 }
 
 private fun nextPeriodDescription(kind: PeriodKind): String = when (kind) {
@@ -988,6 +1008,7 @@ private fun nextPeriodDescription(kind: PeriodKind): String = when (kind) {
     PeriodKind.WEEK -> "查看后一周"
     PeriodKind.MONTH -> "查看下个月"
     PeriodKind.YEAR -> "查看下一年"
+    PeriodKind.ALL -> "使用以来没有下一周期"
 }
 
 private fun mondayOf(date: LocalDate): LocalDate =

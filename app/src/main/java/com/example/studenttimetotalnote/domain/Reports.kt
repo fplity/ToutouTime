@@ -32,6 +32,7 @@ fun defaultReportDate(kind: PeriodKind, now: Instant, zone: ZoneId): LocalDate {
             .minusWeeks(1)
         PeriodKind.MONTH -> today.withDayOfMonth(1).minusMonths(1)
         PeriodKind.YEAR -> today.withDayOfYear(1)
+        PeriodKind.ALL -> today
     }
 }
 
@@ -41,6 +42,17 @@ fun resolveReportPeriod(
     now: Instant,
     zone: ZoneId,
 ): ReportPeriod {
+    if (kind == PeriodKind.ALL) {
+        return ReportPeriod(
+            kind = PeriodKind.ALL,
+            label = "使用偷偷时间以来",
+            startInclusive = Instant.ofEpochMilli(Long.MIN_VALUE),
+            endExclusive = Instant.ofEpochMilli(Long.MAX_VALUE),
+            startDate = LocalDate.MIN,
+            endDateExclusive = LocalDate.MAX,
+        )
+    }
+
     val today = now.atZone(zone).toLocalDate()
     val startDate = normalizeReportDate(kind, selectedDate)
     require(startDate.year in MIN_REPORT_YEAR..MAX_REPORT_YEAR) {
@@ -51,6 +63,7 @@ fun resolveReportPeriod(
         PeriodKind.WEEK -> startDate.plusWeeks(1)
         PeriodKind.MONTH -> startDate.plusMonths(1)
         PeriodKind.YEAR -> startDate.plusYears(1)
+        PeriodKind.ALL -> error("All-time report is resolved before dated periods")
     }
     val label = reportPeriodLabel(kind, startDate, endDateExclusive, today)
 
@@ -83,6 +96,7 @@ fun shiftReportDate(kind: PeriodKind, selectedDate: LocalDate, steps: Int): Loca
         PeriodKind.WEEK -> normalized.plusWeeks(steps.toLong())
         PeriodKind.MONTH -> normalized.plusMonths(steps.toLong())
         PeriodKind.YEAR -> normalized.plusYears(steps.toLong())
+        PeriodKind.ALL -> throw IllegalArgumentException("All-time report cannot be shifted")
     }
     require(shifted.year in MIN_REPORT_YEAR..MAX_REPORT_YEAR) {
         "Date year must be between $MIN_REPORT_YEAR and $MAX_REPORT_YEAR"
@@ -91,7 +105,9 @@ fun shiftReportDate(kind: PeriodKind, selectedDate: LocalDate, steps: Int): Loca
 }
 
 fun canShiftReportDate(kind: PeriodKind, selectedDate: LocalDate, steps: Int): Boolean =
-    runCatching { shiftReportDate(kind, selectedDate, steps) }.isSuccess
+    kind != PeriodKind.ALL && runCatching {
+        shiftReportDate(kind, selectedDate, steps)
+    }.isSuccess
 
 private fun normalizeReportDate(kind: PeriodKind, selectedDate: LocalDate): LocalDate =
     when (kind) {
@@ -101,6 +117,7 @@ private fun normalizeReportDate(kind: PeriodKind, selectedDate: LocalDate): Loca
         )
         PeriodKind.MONTH -> selectedDate.withDayOfMonth(1)
         PeriodKind.YEAR -> selectedDate.withDayOfYear(1)
+        PeriodKind.ALL -> selectedDate
     }
 
 private fun reportPeriodLabel(
@@ -137,6 +154,7 @@ private fun reportPeriodLabel(
         } else {
             "${startDate.year}年（$startDate 至 $endDate）"
         }
+        PeriodKind.ALL -> "使用偷偷时间以来"
     }
 }
 

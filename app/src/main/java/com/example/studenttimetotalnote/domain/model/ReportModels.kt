@@ -8,6 +8,7 @@ enum class PeriodKind {
     WEEK,
     MONTH,
     YEAR,
+    ALL,
 }
 
 data class ReportPeriod(

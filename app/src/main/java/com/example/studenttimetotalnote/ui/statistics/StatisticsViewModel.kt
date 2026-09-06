@@ -339,6 +339,7 @@ internal fun buildTrend(
         PeriodKind.WEEK -> dailyBuckets(report.period.startDate, 7, zone)
         PeriodKind.MONTH -> monthlyBuckets(report, zone)
         PeriodKind.YEAR -> yearlyBuckets(report, zone)
+        PeriodKind.ALL -> emptyList()
     }
     val durations = buckets.map { bucket ->
         records.sumOf { record ->

@@ -74,6 +74,19 @@ class StudyTimerNavigationSmokeTest {
     }
 
     @Test
+    fun allTimePeriodShowsEveryRecordScopeWithoutNavigationArrows() {
+        composeRule.onNodeWithTag(HomeSemantics.TodaySummary).performClick()
+        composeRule.onNodeWithTag(StatisticsSemantics.PeriodTabs).performClick()
+        composeRule.onNodeWithText("使用以来").assertIsDisplayed().performClick()
+
+        composeRule.onNodeWithTag(StatisticsSemantics.PeriodSelector).assertIsDisplayed()
+        composeRule.onNodeWithText("使用以来").assertIsDisplayed()
+        composeRule.onNodeWithText("全部学习记录").assertIsDisplayed()
+        composeRule.onNodeWithTag(StatisticsSemantics.PreviousPeriod).assertDoesNotExist()
+        composeRule.onNodeWithTag(StatisticsSemantics.NextPeriod).assertDoesNotExist()
+    }
+
+    @Test
     fun dayWeekAndMonthPeriodsCanMoveBackwardAndForward() {
         val today = LocalDate.now()
         composeRule.onNodeWithTag(HomeSemantics.TodaySummary).performClick()
