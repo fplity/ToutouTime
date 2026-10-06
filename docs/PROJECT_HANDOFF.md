@@ -4,11 +4,11 @@
 
 - 应用名称：偷偷时间
 - 仓库：`https://github.com/fplity/ToutouTime`
-- Android 版本：`0.4.0`（versionCode `4`）
+- Android 版本：`0.5.0`（versionCode `5`）
 - 包名：`com.example.studenttimetotalnote`
 - 最低系统：Android 8.0（API 26）
-- 推荐安装包：`releases/ToutouTime-v0.4.0-debug.apk`
-- APK SHA-256：`84CF256A9988088270B64FBA32123AE5B0E1EBB9E0A5C4A4F6659A56684E9F07`
+- 推荐安装包：`releases/ToutouTime-v0.5.0-debug.apk`
+- APK SHA-256：`B6054DF33056E65674191A983598A363E5985A870079C059CE804E7CFD63C8C5`
 
 当前完成范围是 Android 本地版。电脑端和跨设备同步没有实现，不能把 README 中的后续方向当作现有功能。
 
@@ -45,6 +45,7 @@
 7. 备注必须文本完全一致才合并；结果按总时长降序、备注文字升序排列。
 8. “使用以来”覆盖所有现存完成记录，没有前后周期，也不显示趋势图。
 9. 删除按记录 ID 精确执行；删除成功后所有统计重新从剩余记录计算。
+10. 正在计时的活动状态不计入完成记录总计；结束并保存后自动更新所有统计。
 
 ## 代码导航
 
@@ -54,12 +55,16 @@
 | `data/StudyTimerStore.kt` | 持久化接口 |
 | `domain/DefaultStudyTimerRepository.kt` | 计时与报告仓库实现 |
 | `domain/Reports.kt` | 周期边界、交集、聚合和排序规则 |
+| `domain/Statistics.kt` | 从同一快照生成总览、趋势和明细的纯函数 |
+| `domain/model/StudySnapshot.kt` | 活动计时与完成记录的统一快照 |
 | `ui/home/HomeViewModel.kt` | 首页计时状态 |
 | `ui/home/HomeScreen.kt` | 首页与备注弹窗 |
 | `ui/statistics/StatisticsViewModel.kt` | 周期选择、趋势、记录和删除状态 |
 | `ui/statistics/StatisticsScreen.kt` | 统计页视觉和交互 |
 | `navigation/StudyTimerNavHost.kt` | 首页/统计页导航 |
 | `StudyTimerDomainTest.kt` | 领域规则与删除回归测试 |
+| `ViewModelRegressionTest.kt` | 重复操作、快速切换、保存状态、取消与生命周期回归 |
+| `RoomStoreInstrumentedTest.kt` | 隔离内存数据库的事务与删除测试（未执行） |
 | `StudyTimerNavigationSmokeTest.kt` | Compose 导航与周期入口测试 |
 
 ## 构建与验证
@@ -70,7 +75,17 @@
 .\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
 ```
 
-2026-10-06 强制重跑验证：21 项 JVM 测试通过且 0 失败；Lint 为 0 Fatal / 0 Error / 46 Warning；Debug 与 AndroidTest APK 构建通过；公开的 v0.4.0 APK 包名、版本号、SHA-256 和 v2 签名均已复核。
+2026-10-06 重构后验证：37 项 JVM 测试通过且 0 失败、0 跳过；Lint 为 0 Fatal / 0 Error / 49 Warning；Debug 与 AndroidTest APK 构建通过；公开的 v0.5.0 APK 包名、版本号、SHA-256、v2 签名和新旧签名证书一致性均已复核。ADB 设备列表为空，未执行手机安装、升级和仪器测试。本轮没有独立测试智能体，不将自测报告冒充独立验收。
+
+详见 [重构与验证说明](REFACTOR.md)。
+
+## 升级兼容性
+
+- 保留包名 `com.example.studenttimetotalnote`、数据库文件 `study_timer.db` 和 Room 数据库版本 `1`。
+- 两张表的实体、主键、列名和类型没有变化，不引入清库或破坏性迁移。
+- v0.4.0 与 v0.5.0 的 APK 签名证书 SHA-256 相同：`3b442ae97d67b84c9f66b1ca8761614c16e83e42a292d4cf6bf88ee2e2df8c6e`。
+- 有旧数据时应覆盖安装，勿卸载、勿清除应用数据；实际设备升级兼容性仍待真机回归。
+- 签名私钥不在仓库，重新构建会使用构建者本机的 Debug 密钥，不保证与已发布 APK 同签名。长期正式维护应另行建立安全的发布签名流程。
 
 Windows 本机曾使用以下环境：
 
@@ -105,4 +120,4 @@ Set-Location ToutouTime
 - 第一阶段只同步已经结束的记录；活动计时由发起设备负责，避免跨设备计时冲突。
 - 验收必须覆盖重复提交、离线重试、双端删除、时钟偏差和冲突解决。
 
-这些只是后续建议，不属于 v0.4.0 已实现能力。
+这些只是后续建议，不属于 v0.5.0 已实现能力。

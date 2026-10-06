@@ -162,26 +162,20 @@ fun todayReport(records: Iterable<StudyRecord>, now: Instant, zone: ZoneId): Per
     aggregate(records, resolveTodayPeriod(now, zone))
 
 fun aggregate(records: Iterable<StudyRecord>, period: ReportPeriod): PeriodReport {
-    val grouped = linkedMapOf<String, MutableList<Long>>()
+    val grouped = linkedMapOf<String, NoteAggregate>()
     for (record in records) {
-        val recordStart = Instant.ofEpochMilli(record.startedAtEpochMs)
-        val recordEnd = Instant.ofEpochMilli(record.endedAtEpochMs)
-        val overlapStart = maxOf(recordStart, period.startInclusive)
-        val overlapEnd = minOf(recordEnd, period.endExclusive)
-        val overlapMs = overlapEnd.toEpochMilli() - overlapStart.toEpochMilli()
+        val overlapMs = overlapDuration(record, period.startInclusive, period.endExclusive)
         if (overlapMs > 0L) {
-            grouped.getOrPut(record.noteText) { mutableListOf() }.add(overlapMs)
+            val previous = grouped[record.noteText]
+            grouped[record.noteText] = NoteAggregate(
+                noteText = record.noteText,
+                durationMs = (previous?.durationMs ?: 0L) + overlapMs,
+                recordCount = (previous?.recordCount ?: 0) + 1,
+            )
         }
     }
 
-    val groups = grouped.entries
-        .map { (note, durations) ->
-            NoteAggregate(
-                noteText = note,
-                durationMs = durations.sum(),
-                recordCount = durations.size,
-            )
-        }
+    val groups = grouped.values
         .sortedWith(compareByDescending<NoteAggregate> { it.durationMs }.thenBy { it.noteText })
 
     return PeriodReport(
@@ -189,6 +183,13 @@ fun aggregate(records: Iterable<StudyRecord>, period: ReportPeriod): PeriodRepor
         totalDurationMs = groups.sumOf { it.durationMs },
         groups = groups,
     )
+}
+
+/** Check the intersection before subtraction, including out-of-period records. */
+fun overlapDuration(record: StudyRecord, startInclusive: Instant, endExclusive: Instant): Long {
+    val start = maxOf(record.startedAtEpochMs, startInclusive.toEpochMilli())
+    val end = minOf(record.endedAtEpochMs, endExclusive.toEpochMilli())
+    return if (end <= start) 0L else end - start
 }
 
 private fun resolveTodayPeriod(now: Instant, zone: ZoneId): ReportPeriod =

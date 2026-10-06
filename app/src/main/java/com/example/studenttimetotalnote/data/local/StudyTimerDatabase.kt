@@ -9,9 +9,14 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.room.withTransaction
 import com.example.studenttimetotalnote.data.StudyTimerStore
 import com.example.studenttimetotalnote.domain.model.ActiveSession
 import com.example.studenttimetotalnote.domain.model.StudyRecord
+import com.example.studenttimetotalnote.domain.model.StudySnapshot
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 @Entity(tableName = "study_records")
 data class StudyRecordEntity(
@@ -86,15 +91,23 @@ class RoomStudyTimerStore(
 ) : StudyTimerStore {
     private val dao: StudyTimerDao = database.studyTimerDao()
 
+    override suspend fun readSnapshot(): StudySnapshot = database.withTransaction {
+        StudySnapshot(
+            activeSession = dao.getActive()?.toDomain(),
+            records = dao.getRecords().map { it.toDomain() },
+        )
+    }
+
+    override fun observeSnapshots(): Flow<StudySnapshot> = database.invalidationTracker
+        .createFlow("study_records", "active_session", emitInitialState = true)
+        .map { readSnapshot() }
+        .distinctUntilChanged()
+
     override suspend fun beginIfIdle(session: ActiveSession): ActiveSession? =
         if (dao.beginIfIdle(session.toEntity())) session else null
 
-    override suspend fun observeActive(): ActiveSession? = dao.getActive()?.toDomain()
-
     override suspend fun finishActive(nowEpochMs: Long): StudyRecord? =
         dao.finishActive(nowEpochMs)?.toDomain()
-
-    override suspend fun observeRecords(): List<StudyRecord> = dao.getRecords().map { it.toDomain() }
 
     override suspend fun deleteRecord(recordId: Long): Boolean =
         dao.deleteRecord(recordId) == 1

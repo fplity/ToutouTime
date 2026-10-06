@@ -7,22 +7,25 @@
 
 ## 项目状态
 
-当前 Android 版本为 `0.4.0`。学习计时、记录持久化、日/周/月/年/使用以来统计、备注聚合和单条记录删除均已实现；项目源码、历史 APK、更新记录和最终交接说明已保存在本仓库。
+当前 Android 版本为 `0.5.0`。学习计时、记录持久化、日/周/月/年/使用以来统计、备注聚合和单条记录删除均已实现。本版完成数据流、领域计算、页面状态、导航与生命周期的整体重构，保留原有纸墨界面和学习数据格式。
 
 电脑端和 Android/电脑双端同步目前只是后续目标，尚未实现。当前版本仍是单机、本地数据应用。
 
 ## 下载与安装
 
-[直接下载偷偷时间 v0.4.0 APK](https://raw.githubusercontent.com/fplity/ToutouTime/refs/heads/main/releases/ToutouTime-v0.4.0-debug.apk)
+[直接下载偷偷时间 v0.5.0 APK](https://github.com/fplity/ToutouTime/releases/download/v0.5.0/ToutouTime-v0.5.0-debug.apk)
+
+[GitHub Raw 备用下载](https://raw.githubusercontent.com/fplity/ToutouTime/refs/heads/main/releases/ToutouTime-v0.5.0-debug.apk)
 
 也可以从仓库的 [`releases/`](releases/) 目录或 GitHub Releases 下载同一安装包。若聊天应用的内置浏览器阻止 APK 下载，请复制链接到手机系统浏览器打开。
 
-- 版本：`0.4.0`（versionCode `4`）
+- 版本：`0.5.0`（versionCode `5`）
 - 包名：`com.example.studenttimetotalnote`
 - 最低系统：Android 8.0（API 26）
-- 文件：`releases/ToutouTime-v0.4.0-debug.apk`
-- SHA-256：`84CF256A9988088270B64FBA32123AE5B0E1EBB9E0A5C4A4F6659A56684E9F07`
+- 文件：`releases/ToutouTime-v0.5.0-debug.apk`
+- SHA-256：`B6054DF33056E65674191A983598A363E5985A870079C059CE804E7CFD63C8C5`
 - 签名：Android Debug 测试签名，APK Signature Scheme v2 校验通过
+- 与仓库 v0.4.0 的签名证书一致，数据库名和表结构未变；升级时不要卸载或清除数据。真机覆盖升级尚未实测。
 
 > 当前 APK 用于直接安装体验，不是应用商店正式签名版本。安装时如系统提示“未知来源应用”，请仅按需为当前浏览器或文件管理器临时授权。
 
@@ -64,7 +67,8 @@
 
 - 记录跨越日、周、月或年边界时，只把与当前统计周期实际重叠的时长计入该周期。
 - 没有数据的周期只保留周期选择，不展示空总览、空趋势或空排行。
-- 日、周和月趋势按所选周期更新；年度趋势按 12 个月展示。
+- 日模式展示所选日期所在自然周的趋势；周模式展示 7 天，月模式展示 7 个分段，年度模式展示 12 个月。
+- 统计只计算已经结束并保存的记录；正在进行的计时显示在首页，结束后自动进入统计。
 
 ### 备注聚合与删除
 
@@ -97,14 +101,14 @@
 ```text
 app/src/main/
 ├─ java/.../data/          # Room 实体、DAO、数据库和存储边界
-├─ java/.../domain/        # 计时仓库、周期解析、时间重叠与备注聚合
+├─ java/.../domain/        # 计时仓库、统一快照、周期解析、聚合、趋势与记录投影
 ├─ java/.../ui/home/       # 首页计时状态与交互
 ├─ java/.../ui/statistics/ # 周期选择、趋势、记录详情与删除
 ├─ java/.../navigation/    # 首页和统计页导航
 └─ res/                    # 应用名称、图标和 Android 资源
 ```
 
-更完整的维护与恢复信息见 [`docs/PROJECT_HANDOFF.md`](docs/PROJECT_HANDOFF.md)。版本变化见 [`CHANGELOG.md`](CHANGELOG.md)。
+更完整的维护与恢复信息见 [`docs/PROJECT_HANDOFF.md`](docs/PROJECT_HANDOFF.md)。本次架构变化和验收证据见 [`docs/REFACTOR.md`](docs/REFACTOR.md)，版本变化见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## 本地构建
 
@@ -132,13 +136,13 @@ Gradle Wrapper 已改用腾讯镜像下载 Gradle 8.11.1，方便网络受限环
 
 2026-10-06 最后一次完整本地验证包含：
 
-- 21 项 JVM 单元测试通过，0 失败。
-- Android Lint（Debug）通过，0 Fatal、0 Error；保留 46 条非阻塞 Warning。
+- 37 项 JVM 单元测试通过，0 失败、0 跳过（21 项领域规则 + 16 项状态与生命周期回归）。
+- Android Lint（Debug）通过，0 Fatal、0 Error；保留 49 条 Warning，主要涉及依赖升级建议、资源和既有组件规范。
 - Debug APK 构建通过。
 - AndroidTest APK 构建通过。
-- v0.4.0 APK 包名、版本号、SHA-256 和 v2 签名已核对。
+- v0.5.0 APK 包名、版本号、SHA-256、v2 签名及与旧版证书一致性已核对。
 
-AndroidTest 目前只完成编译，尚未在连接设备上执行；设计预览也不是当前版本的真机验收截图。因此，本仓库准确描述为“功能与构建已验证的 Debug 版本”，不是已完成商店发布验收的正式版本。
+AndroidTest（含新增的 2 项隔离 Room 测试）目前只完成编译，尚未在连接设备上执行；本轮由主会话执行检查，没有独立 tester，设计预览也不是当前版本的真机验收截图。因此，本仓库准确描述为“功能与构建已验证的 Debug 版本”，不是已完成商店发布验收的正式版本。
 
 ## 版本整合
 
@@ -148,8 +152,9 @@ AndroidTest 目前只完成编译，尚未在连接设备上执行；设计预�
 | 0.2.0 | 在原统计页加入具体年份与年度统计、年度切换和 12 个月趋势 |
 | 0.3.0 | 日、周、月、年统一支持前后周期浏览，并明确显示具体日期范围 |
 | 0.4.0 | 加入“使用以来”总学习时间，删除记录同步影响所有周期与总计 |
+| 0.5.0 | 统一事务快照和响应式状态流，拆分纯领域统计，修复生命周期与快速切换，补充 16 项回归测试 |
 
-仓库保留各阶段 APK，便于回溯；推荐使用最新的 v0.4.0。
+仓库保留各阶段 APK，便于回溯；推荐使用最新的 v0.5.0。
 
 ## 当前限制与后续方向
 

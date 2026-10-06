@@ -1,9 +1,8 @@
 package com.example.studenttimetotalnote.navigation
 
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -12,69 +11,56 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.CreationExtras
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.studenttimetotalnote.domain.StudyTimerRepository
 import com.example.studenttimetotalnote.domain.model.PeriodKind
 import com.example.studenttimetotalnote.ui.home.HomeScreen
 import com.example.studenttimetotalnote.ui.home.HomeViewModel
 import com.example.studenttimetotalnote.ui.statistics.StatisticsScreen
-
-private enum class StudyTimerDestination {
-    HOME,
-    STATISTICS,
-}
+import com.example.studenttimetotalnote.ui.statistics.StatisticsViewModel
 
 @Composable
-fun StudyTimerNavHost(
-    repository: StudyTimerRepository,
-    modifier: Modifier = Modifier,
-) {
-    val activity = LocalActivity.current as? ComponentActivity
-        ?: error("StudyTimerNavHost requires a ComponentActivity host")
-    val homeViewModel = remember(activity, repository) {
-        ViewModelProvider(activity, HomeViewModelFactory(repository))
-            .get(HomeViewModel::class.java)
+fun StudyTimerNavHost(repository: StudyTimerRepository, modifier: Modifier = Modifier) {
+    val factory = remember(repository) { StudyViewModelFactory(repository) }
+    val home: HomeViewModel = viewModel(factory = factory)
+    val statistics: StatisticsViewModel = viewModel(factory = factory)
+    var inStatistics by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(inStatistics) {
+        if (!inStatistics) statistics.onLifecyclePaused()
     }
-    var destinationName by rememberSaveable {
-        mutableStateOf(StudyTimerDestination.HOME.name)
-    }
-    var statisticsPeriodName by rememberSaveable {
-        mutableStateOf(PeriodKind.DAY.name)
-    }
-    val destination = StudyTimerDestination.valueOf(destinationName)
-
-    BackHandler(enabled = destination == StudyTimerDestination.STATISTICS) {
-        destinationName = StudyTimerDestination.HOME.name
-    }
-
-    when (destination) {
-        StudyTimerDestination.HOME -> HomeScreen(
-            viewModel = homeViewModel,
-            onOpenStatistics = { period ->
-                statisticsPeriodName = period.name
-                destinationName = StudyTimerDestination.STATISTICS.name
-            },
+    BackHandler(enabled = inStatistics) { inStatistics = false }
+    if (inStatistics) {
+        StatisticsScreen(
+            viewModel = statistics,
+            onBack = { inStatistics = false },
             modifier = modifier,
         )
-
-        StudyTimerDestination.STATISTICS -> StatisticsScreen(
-            repository = repository,
-            onBack = {
-                destinationName = StudyTimerDestination.HOME.name
+    } else {
+        HomeScreen(
+            viewModel = home,
+            onOpenStatistics = { period: PeriodKind ->
+                statistics.selectPeriod(period)
+                inStatistics = true
             },
-            initialPeriod = PeriodKind.valueOf(statisticsPeriodName),
             modifier = modifier,
         )
     }
 }
 
-private class HomeViewModelFactory(
+private class StudyViewModelFactory(
     private val repository: StudyTimerRepository,
 ) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(HomeViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return HomeViewModel(repository) as T
+    override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
+        val model = when (modelClass) {
+            HomeViewModel::class.java -> HomeViewModel(repository)
+            StatisticsViewModel::class.java -> StatisticsViewModel(
+                repository = repository,
+                savedState = extras.createSavedStateHandle(),
+            )
+            else -> throw IllegalArgumentException("Unknown ViewModel: ${modelClass.name}")
         }
-        throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
+        return modelClass.cast(model) ?: error("Invalid ViewModel type")
     }
 }

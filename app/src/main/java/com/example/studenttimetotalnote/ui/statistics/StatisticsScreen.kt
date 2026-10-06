@@ -33,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,7 +53,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.studenttimetotalnote.domain.StudyTimerRepository
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.example.studenttimetotalnote.domain.StatisticsRecordItem
+import com.example.studenttimetotalnote.domain.TrendPoint
 import com.example.studenttimetotalnote.domain.model.NoteAggregate
 import com.example.studenttimetotalnote.domain.model.PeriodKind
 import com.example.studenttimetotalnote.domain.model.PeriodReport
@@ -63,7 +68,6 @@ import com.example.studenttimetotalnote.ui.theme.Ink
 import com.example.studenttimetotalnote.ui.theme.MenuPaper
 import com.example.studenttimetotalnote.ui.theme.MutedInk
 import com.example.studenttimetotalnote.ui.theme.Paper
-import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -102,22 +106,27 @@ private val Destructive = Color(0xFFB4433D)
 
 @Composable
 fun StatisticsScreen(
-    repository: StudyTimerRepository,
+    viewModel: StatisticsViewModel,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    initialPeriod: PeriodKind = PeriodKind.DAY,
-    clock: Clock = Clock.systemDefaultZone(),
     zone: ZoneId = ZoneId.systemDefault(),
 ) {
-    val viewModel = remember(repository, initialPeriod, clock, zone) {
-        StatisticsViewModel(
-            repository = repository,
-            initialPeriod = initialPeriod,
-            clock = clock,
-            zone = zone,
-        )
-    }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> viewModel.refresh()
+                Lifecycle.Event.ON_PAUSE -> viewModel.onLifecyclePaused()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.onLifecyclePaused()
+        }
+    }
 
     StatisticsContent(
         uiState = uiState,
@@ -126,6 +135,7 @@ fun StatisticsScreen(
         onPreviousPeriod = viewModel::selectPreviousPeriod,
         onNextPeriod = viewModel::selectNextPeriod,
         onOpenRecords = viewModel::openRecordsForNote,
+        onRetry = viewModel::refresh,
         modifier = modifier,
     )
 
@@ -157,6 +167,7 @@ private fun StatisticsContent(
     onPreviousPeriod: () -> Unit,
     onNextPeriod: () -> Unit,
     onOpenRecords: (String) -> Unit,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val report = uiState.report
@@ -190,6 +201,11 @@ private fun StatisticsContent(
             onNextPeriod = onNextPeriod,
         )
 
+        if (uiState.loadError != null) {
+            TextButton(onClick = onRetry, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                Text(uiState.loadError, color = MutedInk)
+            }
+        }
         if (report?.hasData == true) {
             Spacer(modifier = Modifier.height(29.dp))
             PeriodOverview(

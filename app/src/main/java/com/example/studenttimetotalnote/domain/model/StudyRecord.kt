@@ -10,6 +10,7 @@ data class StudyRecord(
 ) {
     init {
         require(endedAtEpochMs >= startedAtEpochMs) { "A study record cannot end before it starts" }
+        require(durationMs >= 0L) { "A study record duration cannot overflow" }
         require(durationMs == endedAtEpochMs - startedAtEpochMs) {
             "durationMs must equal the record interval"
         }

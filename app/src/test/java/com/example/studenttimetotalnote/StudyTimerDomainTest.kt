@@ -13,8 +13,8 @@ import com.example.studenttimetotalnote.domain.model.ActiveSession
 import com.example.studenttimetotalnote.domain.model.PeriodKind
 import com.example.studenttimetotalnote.domain.model.ReportPeriod
 import com.example.studenttimetotalnote.domain.model.StudyRecord
-import com.example.studenttimetotalnote.ui.statistics.buildTrend
-import com.example.studenttimetotalnote.ui.statistics.recordsForReport
+import com.example.studenttimetotalnote.domain.buildTrend
+import com.example.studenttimetotalnote.domain.recordsForReport
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -515,37 +515,4 @@ class StudyTimerDomainTest {
     }
 
     private fun instant(value: String): Instant = Instant.parse(value)
-}
-
-private class FakeStudyTimerStore : StudyTimerStore {
-    private var active: ActiveSession? = null
-    private val records = mutableListOf<StudyRecord>()
-    private var nextId = 1L
-
-    override suspend fun beginIfIdle(session: ActiveSession): ActiveSession? {
-        if (active != null) return null
-        active = session
-        return session
-    }
-
-    override suspend fun observeActive(): ActiveSession? = active
-
-    override suspend fun finishActive(nowEpochMs: Long): StudyRecord? {
-        val session = active ?: return null
-        require(nowEpochMs >= session.startedAtEpochMs)
-        val record = StudyRecord(
-            id = nextId++,
-            noteText = session.noteText,
-            startedAtEpochMs = session.startedAtEpochMs,
-            endedAtEpochMs = nowEpochMs,
-        )
-        records += record
-        active = null
-        return record
-    }
-
-    override suspend fun observeRecords(): List<StudyRecord> = records.toList()
-
-    override suspend fun deleteRecord(recordId: Long): Boolean =
-        records.removeAll { it.id == recordId }
 }

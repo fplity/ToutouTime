@@ -5,6 +5,8 @@ import com.example.studenttimetotalnote.domain.model.ActiveSession
 import com.example.studenttimetotalnote.domain.model.PeriodKind
 import com.example.studenttimetotalnote.domain.model.PeriodReport
 import com.example.studenttimetotalnote.domain.model.StudyRecord
+import com.example.studenttimetotalnote.domain.model.StudySnapshot
+import kotlinx.coroutines.flow.Flow
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -12,6 +14,10 @@ import java.time.ZoneId
 class DefaultStudyTimerRepository(
     private val store: StudyTimerStore,
 ) : StudyTimerRepository {
+    override suspend fun readSnapshot(): StudySnapshot = store.readSnapshot()
+
+    override fun observeSnapshots(): Flow<StudySnapshot> = store.observeSnapshots()
+
     override suspend fun beginSession(noteText: String, now: Instant): ActiveSession {
         val session = ActiveSession(
             noteText = noteText.trim(),
@@ -21,12 +27,12 @@ class DefaultStudyTimerRepository(
             ?: throw IllegalStateException("A study session is already active")
     }
 
-    override suspend fun observeActiveSession(): ActiveSession? = store.observeActive()
+    override suspend fun observeActiveSession(): ActiveSession? = readSnapshot().activeSession
 
     override suspend fun finishSession(now: Instant): StudyRecord? =
         store.finishActive(now.toEpochMilli())
 
-    override suspend fun observeRecords(): List<StudyRecord> = store.observeRecords()
+    override suspend fun observeRecords(): List<StudyRecord> = readSnapshot().records
 
     override suspend fun deleteRecord(recordId: Long): Boolean =
         store.deleteRecord(recordId)

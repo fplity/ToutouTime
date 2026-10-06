@@ -4,11 +4,17 @@ import com.example.studenttimetotalnote.domain.model.ActiveSession
 import com.example.studenttimetotalnote.domain.model.PeriodKind
 import com.example.studenttimetotalnote.domain.model.PeriodReport
 import com.example.studenttimetotalnote.domain.model.StudyRecord
+import com.example.studenttimetotalnote.domain.model.StudySnapshot
+import kotlinx.coroutines.flow.Flow
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
 interface StudyTimerRepository {
+    suspend fun readSnapshot(): StudySnapshot
+
+    fun observeSnapshots(): Flow<StudySnapshot>
+
     suspend fun beginSession(noteText: String, now: Instant): ActiveSession
 
     suspend fun observeActiveSession(): ActiveSession?
